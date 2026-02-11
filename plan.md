@@ -930,7 +930,7 @@ export const darkTheme = {
 - "Quick fact chips" on detail screens (hours, fee, time needed, neighborhood)
 - "Open now" chips + filter (uses structured hours; falls back gracefully)
 - Clear offline state UX ("No internet? Core guide still works.")
-- Language support: **localized UI** (EN/FR first; Arabic UI later) + locale-aware dates/numbers/currency formatting
+- Language support: **localized UI** (EN/FR/ES/DE/IT/NL first; Arabic UI later) + locale-aware dates/numbers/currency formatting
 - RTL readiness: ensure Arabic text renders correctly (alignment, numerals, shaping) in phrasebook + taxi-driver cards
 - Dark mode
 - Accessibility: dynamic type, contrast, touch targets (iOS hit targets ≥44×44 pt; Android hit targets ≥48×48 dp) + correct focus order for VoiceOver/TalkBack
@@ -972,8 +972,8 @@ You are not competing on "more listings". You are competing on:
 
 ### Localization strategy (keep it manageable)
 
-- v1 recommendation: ship **English content** + **localized UI** (EN/FR).
-- Add French content as a v1.x content update once the editorial pipeline is stable.
+- v1 recommendation: ship **English content** + **localized UI** (EN/FR/ES/DE/IT/NL).
+- Add French/Spanish/German/Italian/Dutch content as v1.x content updates once the editorial pipeline is stable.
 - Always keep a safe fallback: if a translation is missing, show English rather than blanks.
 
 ### Content operations (treat content like releases)
@@ -1950,7 +1950,11 @@ marrakechCompass/
 │   │   └── types.ts
 │   └── locales/
 │       ├── en.json
-│       └── fr.json
+│       ├── fr.json
+│       ├── es.json
+│       ├── de.json
+│       ├── it.json
+│       └── nl.json
 │
 ├── assets/                      # Expo asset directory
 │   ├── seed/
@@ -2214,7 +2218,7 @@ Screenshots should highlight:
 15. Downloads manager (audio packs, content updates via `expo-file-system`)
 16. Offline UX polish, error states, empty states
 17. Accessibility audit (VoiceOver / TalkBack)
-18. Localization (EN/FR UI with `react-i18next` + `expo-localization`)
+18. Localization (EN/FR/ES/DE/IT/NL UI with `react-i18next` + `expo-localization`)
 19. EAS Submit configuration for App Store / Play Store
 
 ### Phase 4: Backend (optional)
