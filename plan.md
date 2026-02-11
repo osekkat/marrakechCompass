@@ -1,4 +1,4 @@
-# Marrakech Tourist App (iOS + Android) — React Native Plan (Offline-First + Convex Phase 2)
+# Marrakech Tourist App (iOS + Android) — Expo React Native Plan (Offline-First + Convex Phase 2)
 
 ## 1) Product thesis
 
@@ -54,15 +54,14 @@ It's the "locals' practical guide" you can trust.
 
 ## 2) Monetization
 
-**Monetization options (choose one early):**
+**Chosen model: Option A — Paid up-front**
 
-**Option A — Paid up-front (current plan):**
 - Users pay once to download the app and get the full core experience.
 - No free tier, no subscriptions, no daily limits.
 - Target price: **$4.99–$9.99** (regional pricing enabled).
-- Simplest implementation; no gating logic.
+- Simplest implementation; no gating logic, no IAP flows required.
 
-**Option B — Free download + one-time unlock (recommended for conversion):**
+**Alternative considered (Option B — Free download + one-time unlock):**
 - Free offline preview pack (small but genuinely useful: 3 price cards + 5 places + 20 phrases + arrival checklist)
 - One-time purchase unlocks full Marrakech content + all offline features
 - Still: no subscriptions, no accounts, no ads, no data selling
@@ -352,22 +351,22 @@ Users set a single "Home Base" once (their riad/hotel). Then the app can always 
   - "Show taxi driver" (large Arabic/Latin destination + simple phrase)
   - "Open directions" (online-only, optional)
 
-**Implementation details (React Native):**
+**Implementation details (Expo React Native):**
 
 - Store `homeBase` locally in `user.db` as `{ name, lat, lng, notes? }`.
 
-**Location (react-native-geolocation-service or expo-location):**
-- Use `Geolocation.getCurrentPosition()` for initial fix when screen opens (shows "last updated" time)
-- Use `Geolocation.watchPosition()` **only while compass screen is visible** (start in `useEffect`, clear on unmount)
-- Configure `enableHighAccuracy: true` for navigation; use `false` for general location
-- Set appropriate `timeout` and `maximumAge` values for offline-first behavior
+**Location (expo-location):**
+- Use `Location.getCurrentPositionAsync()` for initial fix when screen opens (shows "last updated" time)
+- Use `Location.watchPositionAsync()` **only while compass screen is visible** (start in `useEffect`, remove subscription on unmount)
+- Configure `accuracy: Location.Accuracy.High` for navigation; use `Location.Accuracy.Balanced` for general location
+- Set appropriate `timeInterval` and `distanceInterval` values for offline-first behavior
 - Add a safety timeout so location updates stop automatically after X minutes if the screen is left open (prevents silent battery drain)
 - Provide a manual "Refresh location" button
 
-**Compass heading (react-native-sensors or expo-sensors):**
-- Use `magnetometer` subscription for compass heading; fallback to "bearing only" if unavailable
-- Subscribe to magnetometer **only while compass screen is visible** (start in `useEffect`, unsubscribe on unmount)
-- Throttle UI redraw (arrow rotation) to a fixed cadence (e.g., 10–20 Hz) using `setUpdateIntervalForType()`
+**Compass heading (expo-sensors):**
+- Use `Magnetometer` subscription for compass heading; fallback to "bearing only" if unavailable
+- Subscribe to magnetometer **only while compass screen is visible** (start in `useEffect`, call `subscription.remove()` on unmount)
+- Throttle UI redraw (arrow rotation) to a fixed cadence (e.g., 10–20 Hz) using `Magnetometer.setUpdateInterval()`
 - Expose a "Heading confidence" state (good / weak / unavailable) that can trigger simplified guidance when sensors are unreliable
 
 **Compute (shared TypeScript logic):**
@@ -560,32 +559,36 @@ Add 2 lightweight credibility boosters:
 
 ## 6) Technical stack (mobile)
 
-### Why React Native?
+### Why Expo React Native?
 
-This app is built with React Native for these reasons:
+This app is built with **Expo React Native** (using `expo-dev-client` for development builds) for these reasons:
 
 1. **Single codebase** — One TypeScript codebase for both iOS and Android. Faster iteration, consistent behavior, and lower maintenance burden for a small team.
 
-2. **Mature ecosystem** — React Native has a robust ecosystem for all app needs: navigation, storage, maps, sensors, and IAP. Libraries like `react-native-sqlite-storage` and `react-native-sensors` provide reliable native access.
+2. **Expo ecosystem** — Expo provides well-maintained, consistent APIs for all app needs: location, sensors, file system, SQLite, and more. Libraries are tested together and versioned for compatibility.
 
-3. **Premium feel is achievable** — With `react-native-screens`, native stack navigators, and careful attention to performance, React Native apps can feel as polished as native apps. Many successful paid apps use React Native.
+3. **Development builds with native access** — Using `expo-dev-client` gives full native module access while retaining Expo's developer experience (fast refresh, easy debugging, EAS Build).
 
-4. **Shared business logic** — All engines (pricing, planning, routing, geo) are written once in TypeScript and work identically on both platforms.
+4. **Premium feel is achievable** — With `react-native-screens`, native stack navigators, and careful attention to performance, Expo apps can feel as polished as native apps. Many successful paid apps use Expo.
 
-5. **Faster development** — Hot reload and a single codebase mean faster feature development and bug fixes.
+5. **Shared business logic** — All engines (pricing, planning, routing, geo) are written once in TypeScript and work identically on both platforms.
+
+6. **Faster development** — Hot reload, single codebase, and Expo's tooling mean faster feature development and bug fixes.
+
+7. **Simplified builds** — EAS Build handles iOS and Android builds in the cloud, reducing local toolchain complexity.
 
 **Tradeoffs acknowledged:**
-- Some native module setup required for sensors/location
+- Development builds required for native modules (can't use Expo Go for full feature set)
+- Some third-party libraries may need config plugins
 - Performance-critical views may need optimization (compass animation, map rendering)
-- IAP requires careful testing with both StoreKit and Play Billing wrappers
 
-### React Native platform requirements
+### Expo platform requirements
 
-**React Native version:** 0.73+ (New Architecture ready)
+**Expo SDK:** 52+ (latest stable)
 
 **iOS**
-- Minimum deployment: iOS 14.0
-- **Build toolchain:** Xcode 15+, keep current with App Store submission requirements
+- Minimum deployment: iOS 14.0 (Expo SDK 52 default)
+- **Build toolchain:** Xcode 15+ (handled by EAS Build for cloud builds)
 
 **Android**
 - Minimum SDK: 26 (Android 8.0)
@@ -599,55 +602,76 @@ This app is built with React Native for these reasons:
 - **React Context + hooks** for dependency injection and state management
 - **Unidirectional data flow** (state flows down, actions flow up)
 
-### React Native stack
+### Expo React Native stack
 
 **Navigation:**
 - `@react-navigation/native` + `@react-navigation/native-stack` for native-feeling navigation
 - `@react-navigation/bottom-tabs` for tab navigator
 - `react-native-screens` for native screen management
+- `react-native-safe-area-context` for safe area handling
 
 **Localization:**
-- `react-i18next` for UI localization (EN/FR)
-- `react-native-localize` for device locale detection
+- `react-i18next` + `i18next` for UI localization (EN/FR)
+- `expo-localization` for device locale detection
 
 **Maps:**
-- `react-native-maps` for online map display
-- Offline map packs: `@maplibre/maplibre-react-native` with MBTiles/vector tiles
+- `react-native-maps` for online map display (works with expo-dev-client)
+- Offline map packs: `@maplibre/maplibre-react-native` with MBTiles/vector tiles (requires expo-dev-client)
 - Offline routing (Medina core): on-device routing using a bundled walking graph inside the pack
 
 **Location & Sensors:**
-- `react-native-geolocation-service` (or `expo-location`) for GPS
-- `react-native-sensors` (or `expo-sensors`) for magnetometer/compass heading
+- `expo-location` for GPS (foreground location only)
+- `expo-sensors` for magnetometer/compass heading
 
 **Sharing:**
-- `react-native-share` for native share sheets
+- `expo-sharing` for native share sheets
 
 **Image rendering:**
-- `react-native-view-shot` for share card screenshots
+- `react-native-view-shot` for share card screenshots (compatible with Expo)
+- `expo-image` for optimized image loading and caching
 
 **Database:**
-- `react-native-sqlite-storage` (or `op-sqlite` for better performance) for SQLite with FTS5 support
+- `expo-sqlite` for SQLite with FTS5 support (Expo SDK 50+ has full FTS5)
 - Same two-DB architecture: `content.db` (read-only) + `user.db` (user state)
 
 **Networking:**
-- `axios` or native `fetch` for HTTP requests
-- `react-native-background-downloader` for resumable background downloads
+- Native `fetch` for HTTP requests
+- `expo-file-system` `createDownloadResumable()` for resumable background downloads
 
 **Storage:**
-- `react-native-fs` for file system access
+- `expo-file-system` for file system access and atomic operations
 - `@react-native-async-storage/async-storage` for small settings only
+- `expo-asset` for bundling seed content
+
+**Network State:**
+- `expo-network` for network state detection and Wi-Fi-only toggle
 
 **IAP:**
-- `react-native-iap` for both StoreKit and Play Billing
+- Not required (Option A: paid up-front model, no in-app purchases)
 
 **UI Components:**
 - Custom components following platform conventions
 - `react-native-reanimated` for smooth animations (compass arrow, transitions)
 - `react-native-gesture-handler` for gesture support
 
+### Expo library mapping
+
+| Vanilla React Native | Expo Equivalent | Notes |
+|---------------------|-----------------|-------|
+| `react-native-geolocation-service` | `expo-location` | Better Expo integration |
+| `react-native-sensors` | `expo-sensors` | Magnetometer for compass |
+| `react-native-sqlite-storage` | `expo-sqlite` | Full FTS5 support in SDK 50+ |
+| `react-native-fs` | `expo-file-system` | File operations, atomic moves |
+| `react-native-background-downloader` | `expo-file-system` | `createDownloadResumable()` |
+| `@react-native-community/netinfo` | `expo-network` | Network state detection |
+| `react-native-localize` | `expo-localization` | Device locale detection |
+| `react-native-share` | `expo-sharing` | Native share sheets |
+| `react-native-fast-image` | `expo-image` | Better caching, modern API |
+| `react-native-iap` | Not needed | Option A: paid up-front |
+
 ### State & data
 
-React Native uses the same data architecture on both platforms:
+Expo React Native uses the same data architecture on both platforms:
 
 - **Two SQLite database files:**
   - `content.db` (mostly read-only): places, price cards, phrases, tips/articles, FTS tables
@@ -658,15 +682,15 @@ React Native uses the same data architecture on both platforms:
   - Settings: language, exchange rate, Wi‑Fi-only downloads
 
 **Offline content store:**
-- Ship bundled seed content in app assets (`ios/MarrakechGuide/Resources/` and `android/app/src/main/assets/`)
-- On first run, copy seed `content.db` to writable location using `react-native-fs` (**FTS tables must ship prebuilt**; if a rebuild is ever required, do it in the background and keep core search usable)
+- Ship bundled seed content using `expo-asset` (in `assets/seed/content.db`)
+- On first run, copy seed `content.db` to writable location using `expo-file-system` (**FTS tables must ship prebuilt**; if a rebuild is ever required, do it in the background and keep core search usable)
 - Cache updated bundles; verify; then:
   - (Preferred) replace `content.db` with a prebuilt, verified DB file for that version
   - Atomic swap with rollback support
 
 - Activation must be exclusive and crash-safe:
   - Close all SQLite connections via the db wrapper
-  - Use `RNFS.moveFile()` for atomic rename (temp file + rollback)
+  - Use `FileSystem.moveAsync()` for atomic rename (temp file + rollback)
   - Reopen connections after swap
 
 **Non-blocking startup rule:**
@@ -678,17 +702,17 @@ React Native uses the same data architecture on both platforms:
 
 Treat downloads like a mini product: predictable, resumable, and easy to manage.
 
-**React Native (both platforms):**
-- Use `react-native-background-downloader` for resumable background downloads
-- Resume data stored for pause/resume (library handles Range headers)
-- Preflight: check available disk space via `react-native-fs` (`RNFS.getFSInfo()`)
-- Use `@react-native-community/netinfo` for network state and Wi-Fi-only toggle
+**Expo (both platforms):**
+- Use `expo-file-system` `createDownloadResumable()` for resumable background downloads
+- Resume data stored for pause/resume (library handles Range headers via `savable()` and `resumeAsync()`)
+- Preflight: check available disk space via `expo-file-system` (`FileSystem.getFreeDiskStorageAsync()`)
+- Use `expo-network` for network state and Wi-Fi-only toggle
 
 **Packs are a product surface:**
 - Pack manifest supports **dependencies** (e.g., routing_graph depends on medina_map_tiles)
 - "Recommended downloads" (based on selected itinerary / trip length / Home Base region)
 - Verify downloads (sha256 from manifest) before importing/using assets
-  - Use `react-native-crypto` or native module for sha256 verification
+  - Use `expo-crypto` for sha256 verification
 - **Signed manifest (recommended even in v1 if any packs are hosted remotely):** Ed25519 signature with pinned public key
 - Safe install pipeline: download → verify → unpack to temp → validate → atomic move → register
 - Rollback: keep last-known-good pack version; auto-revert on validation failure
@@ -697,8 +721,8 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
   - Allow uninstall per pack
   - Keep the last 1–2 content versions for rollback, then auto-clean older ones
 - Backup policy (critical for large offline packs):
-  - **iOS:** exclude re-downloadable files from iCloud backup using `RNFS.pathForGroup()` or setting `NSURLIsExcludedFromBackupKey`
-  - **Android:** configure backup rules in `AndroidManifest.xml` to exclude large packs
+  - **iOS:** Use `FileSystem.documentDirectory` with appropriate backup exclusion via Expo config plugin or native configuration
+  - **Android:** configure backup rules via Expo config plugin to exclude large packs
   - Backup only user intent/state (`user.db` + small settings)
 
 **Pack types (district-based + utility-based):**
@@ -722,7 +746,7 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
   - Index `aliases` aggressively (high leverage for tourists)
   - Add lightweight ranking boosts: exact match > alias match > prefix match > contains
   - Add "Did you mean?" suggestions using aliases + prefix candidates (offline, deterministic)
-  - `react-native-sqlite-storage` or `op-sqlite` support FTS5 on both platforms
+  - `expo-sqlite` supports FTS5 on both platforms (Expo SDK 50+)
   - FTS tables must be prebuilt in `content.db` (no runtime index creation)
 
 ---
@@ -731,151 +755,190 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
 
 ### v1 (no backend)
 
-**React Native Architecture (TypeScript)**
+**Expo React Native Architecture (TypeScript)**
 ```
-src/
-├─ App.tsx (entry point, providers, navigation setup)
-├─ core/
-│   ├─ database/
-│   │   ├─ ContentDatabase.ts (SQLite wrapper, read-only content)
-│   │   ├─ UserDatabase.ts (SQLite wrapper, user state)
-│   │   ├─ DatabaseManager.ts (connection management, atomic swap)
-│   │   └─ migrations/
-│   ├─ repositories/
-│   │   ├─ PlaceRepository.ts
-│   │   ├─ PriceCardRepository.ts
-│   │   ├─ PhraseRepository.ts
-│   │   ├─ ItineraryRepository.ts
-│   │   ├─ FavoritesRepository.ts
-│   │   └─ RecentsRepository.ts
-│   ├─ services/
-│   │   ├─ LocationService.ts (geolocation wrapper)
-│   │   ├─ HeadingService.ts (magnetometer/compass)
-│   │   ├─ DownloadService.ts (background downloads)
-│   │   ├─ ContentSyncService.ts (bundle verification + swap)
-│   │   └─ SearchService.ts (FTS5 queries)
-│   └─ engines/
-│       ├─ PricingEngine.ts (Quote → Action logic)
-│       ├─ PlanEngine.ts (My Day offline builder)
-│       ├─ RouteEngine.ts (leg estimates + progress)
-│       └─ GeoEngine.ts (haversine, bearing)
-├─ features/
-│   ├─ home/
-│   │   ├─ HomeScreen.tsx
-│   │   ├─ useHome.ts (hook for state/logic)
-│   │   └─ components/
-│   ├─ explore/
-│   │   ├─ ExploreScreen.tsx
-│   │   ├─ PlaceListScreen.tsx
-│   │   ├─ PlaceMapScreen.tsx
-│   │   ├─ PlaceDetailScreen.tsx
-│   │   └─ useExplore.ts
-│   ├─ eat/
-│   │   ├─ EatScreen.tsx
-│   │   └─ useEat.ts
-│   ├─ prices/
-│   │   ├─ PricesScreen.tsx
-│   │   ├─ PriceCardDetailScreen.tsx
-│   │   └─ usePrices.ts
-│   ├─ quoteAction/
-│   │   ├─ QuoteActionScreen.tsx
-│   │   ├─ FairnessMeter.tsx
-│   │   └─ useQuoteAction.ts
-│   ├─ homeBase/
-│   │   ├─ HomeBaseSetupScreen.tsx
-│   │   ├─ GoHomeScreen.tsx
-│   │   ├─ CompassArrow.tsx
-│   │   └─ useHomeBase.ts
-│   ├─ myDay/
-│   │   ├─ MyDayScreen.tsx
-│   │   ├─ ConstraintPicker.tsx
-│   │   └─ useMyDay.ts
-│   ├─ routeCards/
-│   │   ├─ RouteOverviewScreen.tsx
-│   │   ├─ NextStopScreen.tsx
-│   │   └─ useRoute.ts
-│   ├─ phrasebook/
-│   │   ├─ PhrasebookScreen.tsx
-│   │   ├─ PhraseDetailScreen.tsx
-│   │   └─ usePhrasebook.ts
-│   ├─ search/
-│   │   ├─ SearchScreen.tsx
-│   │   └─ useSearch.ts
-│   ├─ more/
-│   │   ├─ MoreScreen.tsx
-│   │   ├─ CultureScreen.tsx
-│   │   ├─ TipsScreen.tsx
-│   │   └─ ItinerariesScreen.tsx
-│   └─ settings/
-│       ├─ SettingsScreen.tsx
-│       ├─ DownloadsScreen.tsx
-│       └─ DiagnosticsScreen.tsx
-├─ shared/
-│   ├─ components/
-│   │   ├─ Card.tsx
-│   │   ├─ Chip.tsx
-│   │   ├─ PriceTag.tsx
-│   │   ├─ MapPreview.tsx
-│   │   ├─ SearchBar.tsx
-│   │   ├─ SectionHeader.tsx
-│   │   ├─ ShareCardRenderer.tsx
-│   │   └─ OfflineBanner.tsx
-│   ├─ hooks/
-│   │   ├─ useDatabase.ts
-│   │   ├─ useLocation.ts
-│   │   ├─ useNetworkState.ts
-│   │   └─ useStorage.ts
-│   ├─ models/
-│   │   ├─ Place.ts
-│   │   ├─ PriceCard.ts
-│   │   ├─ GlossaryPhrase.ts
-│   │   ├─ Itinerary.ts
-│   │   ├─ Plan.ts
-│   │   └─ UserSettings.ts
-│   ├─ context/
-│   │   ├─ DatabaseContext.tsx
-│   │   ├─ SettingsContext.tsx
-│   │   └─ LocationContext.tsx
-│   ├─ theme/
-│   │   ├─ colors.ts
-│   │   ├─ typography.ts
-│   │   └─ spacing.ts
-│   └─ utils/
-│       ├─ formatters.ts
-│       ├─ constants.ts
-│       └─ i18n.ts
-├─ navigation/
-│   ├─ RootNavigator.tsx
-│   ├─ TabNavigator.tsx
-│   └─ types.ts
-└─ locales/
-    ├─ en.json
-    └─ fr.json
-
-ios/
-├─ MarrakechGuide.xcodeproj
-├─ MarrakechGuide/
-│   ├─ AppDelegate.mm
-│   ├─ Info.plist
-│   └─ Resources/
-│       ├─ SeedData/ (bundled content.db)
-│       └─ Audio/
-└─ Podfile
-
-android/
-├─ app/
-│   ├─ build.gradle
-│   ├─ src/main/
-│   │   ├─ AndroidManifest.xml
-│   │   ├─ java/com/marrakechguide/
-│   │   │   └─ MainActivity.kt
-│   │   ├─ res/
-│   │   └─ assets/
-│   │       └─ seed/ (bundled content.db)
-└─ build.gradle
+marrakechCompass/
+├─ app.json                      # Expo app configuration
+├─ app.config.js                 # Dynamic Expo config (optional)
+├─ eas.json                      # EAS Build configuration
+├─ package.json
+├─ tsconfig.json
+├─ babel.config.js
+├─ metro.config.js
+├─ index.js                      # Entry point (registers App)
+│
+├─ src/
+│   ├─ App.tsx                   # Root component, providers, navigation setup
+│   ├─ core/
+│   │   ├─ database/
+│   │   │   ├─ ContentDatabase.ts    # expo-sqlite wrapper, read-only content
+│   │   │   ├─ UserDatabase.ts       # expo-sqlite wrapper, user state
+│   │   │   ├─ DatabaseManager.ts    # connection management, atomic swap
+│   │   │   └─ migrations/
+│   │   ├─ repositories/
+│   │   │   ├─ PlaceRepository.ts
+│   │   │   ├─ PriceCardRepository.ts
+│   │   │   ├─ PhraseRepository.ts
+│   │   │   ├─ ItineraryRepository.ts
+│   │   │   ├─ FavoritesRepository.ts
+│   │   │   └─ RecentsRepository.ts
+│   │   ├─ services/
+│   │   │   ├─ LocationService.ts    # expo-location wrapper
+│   │   │   ├─ HeadingService.ts     # expo-sensors magnetometer
+│   │   │   ├─ DownloadService.ts    # expo-file-system downloads
+│   │   │   ├─ ContentSyncService.ts # bundle verification + swap
+│   │   │   └─ SearchService.ts      # FTS5 queries
+│   │   └─ engines/
+│   │       ├─ PricingEngine.ts      # Quote → Action logic
+│   │       ├─ PlanEngine.ts         # My Day offline builder
+│   │       ├─ RouteEngine.ts        # leg estimates + progress
+│   │       └─ GeoEngine.ts          # haversine, bearing
+│   ├─ features/
+│   │   ├─ home/
+│   │   │   ├─ HomeScreen.tsx
+│   │   │   ├─ useHome.ts
+│   │   │   └─ components/
+│   │   ├─ explore/
+│   │   │   ├─ ExploreScreen.tsx
+│   │   │   ├─ PlaceListScreen.tsx
+│   │   │   ├─ PlaceMapScreen.tsx
+│   │   │   ├─ PlaceDetailScreen.tsx
+│   │   │   └─ useExplore.ts
+│   │   ├─ eat/
+│   │   │   ├─ EatScreen.tsx
+│   │   │   └─ useEat.ts
+│   │   ├─ prices/
+│   │   │   ├─ PricesScreen.tsx
+│   │   │   ├─ PriceCardDetailScreen.tsx
+│   │   │   └─ usePrices.ts
+│   │   ├─ quoteAction/
+│   │   │   ├─ QuoteActionScreen.tsx
+│   │   │   ├─ FairnessMeter.tsx
+│   │   │   └─ useQuoteAction.ts
+│   │   ├─ homeBase/
+│   │   │   ├─ HomeBaseSetupScreen.tsx
+│   │   │   ├─ GoHomeScreen.tsx
+│   │   │   ├─ CompassArrow.tsx
+│   │   │   └─ useHomeBase.ts
+│   │   ├─ myDay/
+│   │   │   ├─ MyDayScreen.tsx
+│   │   │   ├─ ConstraintPicker.tsx
+│   │   │   └─ useMyDay.ts
+│   │   ├─ routeCards/
+│   │   │   ├─ RouteOverviewScreen.tsx
+│   │   │   ├─ NextStopScreen.tsx
+│   │   │   └─ useRoute.ts
+│   │   ├─ phrasebook/
+│   │   │   ├─ PhrasebookScreen.tsx
+│   │   │   ├─ PhraseDetailScreen.tsx
+│   │   │   └─ usePhrasebook.ts
+│   │   ├─ search/
+│   │   │   ├─ SearchScreen.tsx
+│   │   │   └─ useSearch.ts
+│   │   ├─ more/
+│   │   │   ├─ MoreScreen.tsx
+│   │   │   ├─ CultureScreen.tsx
+│   │   │   ├─ TipsScreen.tsx
+│   │   │   └─ ItinerariesScreen.tsx
+│   │   └─ settings/
+│   │       ├─ SettingsScreen.tsx
+│   │       ├─ DownloadsScreen.tsx
+│   │       └─ DiagnosticsScreen.tsx
+│   ├─ shared/
+│   │   ├─ components/
+│   │   │   ├─ Card.tsx
+│   │   │   ├─ Chip.tsx
+│   │   │   ├─ PriceTag.tsx
+│   │   │   ├─ MapPreview.tsx
+│   │   │   ├─ SearchBar.tsx
+│   │   │   ├─ SectionHeader.tsx
+│   │   │   ├─ ShareCardRenderer.tsx
+│   │   │   └─ OfflineBanner.tsx
+│   │   ├─ hooks/
+│   │   │   ├─ useDatabase.ts
+│   │   │   ├─ useLocation.ts        # wraps expo-location
+│   │   │   ├─ useNetworkState.ts    # wraps expo-network
+│   │   │   └─ useStorage.ts
+│   │   ├─ models/
+│   │   │   ├─ Place.ts
+│   │   │   ├─ PriceCard.ts
+│   │   │   ├─ GlossaryPhrase.ts
+│   │   │   ├─ Itinerary.ts
+│   │   │   ├─ Plan.ts
+│   │   │   └─ UserSettings.ts
+│   │   ├─ context/
+│   │   │   ├─ DatabaseContext.tsx
+│   │   │   ├─ SettingsContext.tsx
+│   │   │   └─ LocationContext.tsx
+│   │   ├─ theme/
+│   │   │   ├─ colors.ts
+│   │   │   ├─ typography.ts
+│   │   │   └─ spacing.ts
+│   │   └─ utils/
+│   │       ├─ formatters.ts
+│   │       ├─ constants.ts
+│   │       └─ i18n.ts
+│   ├─ navigation/
+│   │   ├─ RootNavigator.tsx
+│   │   ├─ TabNavigator.tsx
+│   │   └─ types.ts
+│   └─ locales/
+│       ├─ en.json
+│       └─ fr.json
+│
+├─ assets/
+│   ├─ seed/
+│   │   └─ content.db               # Bundled SQLite database
+│   ├─ images/
+│   │   ├─ icon.png
+│   │   ├─ splash.png
+│   │   └─ adaptive-icon.png
+│   └─ fonts/                       # Custom fonts if needed
+│
+├─ shared/                          # Content pipeline (Node.js scripts)
+│   ├─ content/
+│   │   ├─ places.json
+│   │   ├─ price_cards.json
+│   │   ├─ glossary.json
+│   │   ├─ culture.json
+│   │   ├─ tips.json
+│   │   ├─ activities.json
+│   │   ├─ itineraries.json
+│   │   └─ events.json
+│   ├─ scripts/
+│   │   ├─ validate-content.ts
+│   │   ├─ build-bundle.ts          # JSON → SQLite content.db
+│   │   ├─ check-links.ts
+│   │   └─ copy-db-to-assets.ts     # Copy content.db to assets/seed/
+│   └─ schema/
+│       └─ content-schema.json
+│
+├─ ios/                             # Generated by expo prebuild (managed by Expo)
+│   └─ ...
+│
+├─ android/                         # Generated by expo prebuild (managed by Expo)
+│   └─ ...
+│
+├─ __tests__/
+│   ├─ engines/
+│   │   ├─ PricingEngine.test.ts
+│   │   ├─ PlanEngine.test.ts
+│   │   └─ GeoEngine.test.ts
+│   └─ components/
+│
+└─ convex/                          # Phase 2 only
+    ├─ schema.ts
+    ├─ content.ts
+    └─ versions.ts
 ```
 
 **Rule:** The app remains fully useful without internet.
+
+**Expo-specific notes:**
+- `ios/` and `android/` directories are generated by `expo prebuild` and should be in `.gitignore` for managed workflow, or committed if using continuous native generation
+- Use `eas.json` to configure build profiles (development, preview, production)
+- `app.json` contains Expo-specific configuration (bundle identifiers, permissions, plugins)
+- Seed content bundled via `expo-asset` from `assets/seed/content.db`
 
 ---
 
@@ -1371,17 +1434,28 @@ The current `shared/content/*.json` files (including the newly added Lonely Plan
 
 ## 11) Project structure (recommended)
 
-### React Native monorepo structure
+### Expo React Native project structure
 
 ```
-marrakech-guide/
+marrakechCompass/
+├── app.json                     # Expo app configuration
+├── app.config.js                # Dynamic Expo config (for env vars, plugins)
+├── eas.json                     # EAS Build configuration
+├── package.json                 # Dependencies, scripts
+├── tsconfig.json                # TypeScript configuration (strict mode)
+├── babel.config.js              # Babel configuration
+├── metro.config.js              # Metro bundler configuration
+├── index.js                     # Entry point
+├── .eslintrc.js                 # ESLint configuration
+├── jest.config.js               # Jest test configuration
+│
 ├── src/                         # React Native TypeScript source
-│   ├── App.tsx
+│   ├── App.tsx                  # Root component with providers
 │   ├── core/
-│   │   ├── database/
-│   │   ├── repositories/
-│   │   ├── services/
-│   │   └── engines/
+│   │   ├── database/            # expo-sqlite wrappers
+│   │   ├── repositories/        # Data access layer
+│   │   ├── services/            # expo-location, expo-sensors, etc.
+│   │   └── engines/             # Business logic (pricing, planning, geo)
 │   ├── features/
 │   │   ├── home/
 │   │   ├── explore/
@@ -1396,94 +1470,96 @@ marrakech-guide/
 │   │   ├── more/
 │   │   └── settings/
 │   ├── shared/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── models/
-│   │   ├── context/
-│   │   ├── theme/
-│   │   └── utils/
+│   │   ├── components/          # Reusable UI components
+│   │   ├── hooks/               # Custom React hooks
+│   │   ├── models/              # TypeScript types + Zod schemas
+│   │   ├── context/             # React Context providers
+│   │   ├── theme/               # Design tokens (colors, typography)
+│   │   └── utils/               # Formatters, constants, i18n
 │   ├── navigation/
+│   │   ├── RootNavigator.tsx
+│   │   ├── TabNavigator.tsx
+│   │   └── types.ts
 │   └── locales/
-├── ios/                         # iOS native project (managed by RN CLI)
-│   ├── MarrakechGuide.xcodeproj
-│   ├── MarrakechGuide/
-│   │   ├── AppDelegate.mm
-│   │   ├── Info.plist
-│   │   └── Resources/
-│   │       ├── SeedData/
-│   │       │   └── content.db
-│   │       └── Audio/
-│   └── Podfile
-├── android/                     # Android native project (managed by RN CLI)
-│   ├── app/
-│   │   ├── build.gradle
-│   │   ├── src/main/
-│   │   │   ├── AndroidManifest.xml
-│   │   │   ├── java/com/marrakechguide/
-│   │   │   │   └── MainActivity.kt
-│   │   │   ├── res/
-│   │   │   └── assets/
-│   │   │       └── seed/
-│   │   │           └── content.db
-│   └── build.gradle
-├── shared/                      # Shared content + build scripts
+│       ├── en.json
+│       └── fr.json
+│
+├── assets/                      # Expo asset directory
+│   ├── seed/
+│   │   └── content.db           # Bundled SQLite database
+│   ├── images/
+│   │   ├── icon.png             # App icon (1024x1024)
+│   │   ├── splash.png           # Splash screen
+│   │   └── adaptive-icon.png    # Android adaptive icon
+│   ├── fonts/                   # Custom fonts
+│   └── audio/                   # Bundled audio files
+│
+├── shared/                      # Content pipeline (Node.js scripts)
 │   ├── content/
 │   │   ├── places.json
 │   │   ├── price_cards.json
 │   │   ├── glossary.json
 │   │   ├── culture.json
 │   │   ├── tips.json
-│   │   └── itineraries.json
+│   │   ├── activities.json
+│   │   ├── itineraries.json
+│   │   └── events.json
 │   ├── scripts/
-│   │   ├── validate-content.ts
+│   │   ├── validate-content.ts  # Zod validation
 │   │   ├── build-bundle.ts      # JSON → SQLite content.db
-│   │   ├── check-links.ts
-│   │   └── copy-db-to-apps.ts   # Copy content.db to ios/ and android/
+│   │   ├── check-links.ts       # Reference validation
+│   │   └── copy-db-to-assets.ts # Copy to assets/seed/
 │   └── schema/
 │       └── content-schema.json  # JSON Schema for validation
-├── convex/                      # Phase 2 only
-│   ├── schema.ts
-│   ├── content.ts
-│   └── versions.ts
+│
+├── ios/                         # Generated by `expo prebuild`
+│   └── ...                      # (managed by Expo, regenerated on prebuild)
+│
+├── android/                     # Generated by `expo prebuild`
+│   └── ...                      # (managed by Expo, regenerated on prebuild)
+│
 ├── __tests__/                   # Jest tests
 │   ├── engines/
 │   │   ├── PricingEngine.test.ts
 │   │   ├── PlanEngine.test.ts
 │   │   └── GeoEngine.test.ts
 │   └── components/
-├── docs/
-│   └── api.md
-├── package.json
-├── tsconfig.json
-├── babel.config.js
-├── metro.config.js
-├── jest.config.js
-├── .eslintrc.js
-└── app.json
+│
+├── convex/                      # Phase 2 only
+│   ├── schema.ts
+│   ├── content.ts
+│   └── versions.ts
+│
+└── docs/
+    └── api.md
 ```
 
 ### Key files explained
 
-**Root configuration files:**
+**Root configuration files (Expo-specific):**
+- `app.json` - Expo app configuration (name, slug, version, iOS/Android bundle IDs, permissions, plugins)
+- `app.config.js` - Dynamic configuration (environment variables, conditional plugins)
+- `eas.json` - EAS Build profiles (development, preview, production)
 - `package.json` - dependencies, scripts for build/test/lint
-- `tsconfig.json` - TypeScript configuration
+- `tsconfig.json` - TypeScript configuration with path aliases
 - `metro.config.js` - Metro bundler configuration
-- `app.json` - React Native app configuration
 
-**iOS-specific files (minimal, managed by RN CLI):**
-- `ios/Podfile` - CocoaPods dependencies
-- `ios/MarrakechGuide/Info.plist` - iOS app configuration
-- `ios/MarrakechGuide/Resources/SeedData/content.db` - bundled content
+**Native directories (managed by Expo):**
+- `ios/` - Generated by `expo prebuild`, contains Xcode project
+- `android/` - Generated by `expo prebuild`, contains Gradle project
+- These directories are regenerated when you run `expo prebuild --clean`
+- For development builds, commit these or regenerate in CI
 
-**Android-specific files (minimal, managed by RN CLI):**
-- `android/app/build.gradle` - Gradle configuration
-- `android/app/src/main/AndroidManifest.xml` - Android app configuration
-- `android/app/src/main/assets/seed/content.db` - bundled content
+**Assets (Expo asset system):**
+- `assets/seed/content.db` - Bundled SQLite database (loaded via expo-asset)
+- `assets/images/` - App icons, splash screens
+- `assets/fonts/` - Custom fonts (loaded via expo-font)
+- `assets/audio/` - Bundled audio files
 
 **Content pipeline:**
 - `shared/content/` - JSON source files (single source of truth)
 - `shared/scripts/build-bundle.ts` - generates `content.db` from JSON
-- `shared/scripts/copy-db-to-apps.ts` - copies DB to both platform asset folders
+- `shared/scripts/copy-db-to-assets.ts` - copies DB to `assets/seed/`
 
 ---
 
@@ -1493,12 +1569,12 @@ marrakech-guide/
 
 - Fast startup (avoid heavy network calls on launch)
 - Responsiveness is non-negotiable: never do disk IO / network / JSON decoding on the JS thread; use async patterns and consider moving heavy work to native modules if needed
-- Lazy-load images using `react-native-fast-image` or similar
+- Lazy-load images using `expo-image` (built-in caching and performance optimization)
 - Build search index once and reuse
 - Measure and enforce startup performance:
-  - Profile launch time on both iOS and Android using Flipper or platform-specific tools
-  - Use Hermes engine for faster JS execution and smaller bundle size
-  - Consider RAM bundles for faster startup on Android
+  - Profile launch time on both iOS and Android using Flipper or Expo Dev Tools
+  - Hermes engine is enabled by default in Expo SDK 50+
+  - Use EAS Build for optimized production builds
 - Set performance budgets:
   - cold start target (mid-tier device)
   - search response time target (p95)
@@ -1560,12 +1636,14 @@ marrakech-guide/
 - Background download resume after process death
 - Battery optimization handling (Doze mode)
 
-**React Native-specific:**
+**Expo-specific:**
 - JS bundle loads and runs on both platforms without errors
 - No yellow box warnings in release builds
-- Hermes engine enabled and working correctly
-- Native modules (SQLite, sensors, geolocation) work on both platforms
+- Hermes engine enabled (default in Expo SDK 50+)
+- Expo modules (expo-sqlite, expo-sensors, expo-location) work on both platforms
 - React Navigation transitions are smooth (no jank)
+- Development build runs correctly on physical devices
+- EAS Build produces valid App Store / Play Store binaries
 
 **Location flows tested (both platforms):**
 - Deny permission (app still usable)
@@ -1620,50 +1698,56 @@ Screenshots should highlight:
 
 ### Phase 0: Foundation
 
-1. **React Native project setup**
-   - Initialize React Native project with TypeScript template
-   - Configure Hermes engine for both platforms
-   - Set up ESLint, Prettier, and TypeScript strict mode
+1. **Expo project setup**
+   - Initialize Expo project with TypeScript template: `npx create-expo-app marrakechCompass --template expo-template-blank-typescript`
+   - Install `expo-dev-client` for development builds with native module access
+   - Configure EAS Build (`eas.json`) with development, preview, and production profiles
+   - Set up ESLint, Prettier, and TypeScript strict mode with path aliases
    - Configure Metro bundler and Jest for testing
 
 2. **Shared content pipeline**
-   - JSON schema + validation scripts
+   - JSON schema + Zod validation scripts
    - `build-bundle.ts` script (JSON → SQLite `content.db`)
    - Treat `shared/content/` as the source of truth for most app data
-   - `copy-db-to-apps.ts` to copy content.db to both iOS and Android asset folders
+   - `copy-db-to-assets.ts` to copy content.db to `assets/seed/`
    - Seed content for development (5 places, 5 price cards, 20 phrases)
 
 3. **App foundation**
-   - Install and configure core dependencies (React Navigation, SQLite, AsyncStorage)
-   - Set up DatabaseManager with SQLite wrapper
-   - Create basic theme + design system components
+   - Install and configure core Expo dependencies:
+     - Navigation: `@react-navigation/native`, `@react-navigation/native-stack`, `@react-navigation/bottom-tabs`
+     - Database: `expo-sqlite`
+     - Storage: `expo-file-system`, `@react-native-async-storage/async-storage`
+     - Location: `expo-location`, `expo-sensors`
+     - UI: `react-native-reanimated`, `react-native-gesture-handler`, `react-native-screens`
+   - Set up DatabaseManager with `expo-sqlite` wrapper
+   - Create basic theme + design system components (Marrakech terracotta palette)
    - Implement bottom tab navigation structure
-   - Test on both iOS and Android simulators/emulators
+   - Create first development build and test on iOS Simulator and Android Emulator
 
 ### Phase 1: Core features
 
-4. Integrate generated `content.db` (from `shared/content/`) into app bundles, then implement content loading + favorites/recents
+4. Integrate generated `content.db` (from `shared/content/`) via `expo-asset`, then implement content loading + favorites/recents
 5. Explore list + place detail
 6. Prices list + price card detail (this is the money-maker)
 7. **Quote → Action** (reuses Price Cards; high value)
-8. Darija phrasebook + search (FTS5)
+8. Darija phrasebook + search (FTS5 via `expo-sqlite`)
 9. Itineraries + tips/culture pages
 
 ### Phase 2: Location features
 
-10. **Home Base compass** (react-native-geolocation-service + react-native-sensors for heading; big confidence win)
+10. **Home Base compass** (`expo-location` + `expo-sensors` magnetometer for heading; big confidence win)
 11. **My Day** plan builder (offline daily plan)
 12. **Route Cards** (execute itineraries with next-stop guidance)
-13. Map integration + external directions (react-native-maps + Linking for external maps)
+13. Map integration + external directions (`react-native-maps` with expo-dev-client + `expo-linking` for external maps)
 
 ### Phase 3: Polish & store readiness
 
 14. Store-ready polish (screenshots, App Store video, copy)
-15. Downloads manager (audio packs, content updates)
+15. Downloads manager (audio packs, content updates via `expo-file-system`)
 16. Offline UX polish, error states, empty states
 17. Accessibility audit (VoiceOver / TalkBack)
-18. Localization (EN/FR UI)
-19. Store-ready screenshots, App Store / Play Store metadata
+18. Localization (EN/FR UI with `react-i18next` + `expo-localization`)
+19. EAS Submit configuration for App Store / Play Store
 
 ### Phase 4: Backend (optional)
 
@@ -1677,19 +1761,19 @@ Screenshots should highlight:
 - Convex schema: content tables + `contentVersions`
 - Upload pipeline for curated content (could be manual at first)
 
-**React Native sync module (TypeScript):**
-- `ContentSyncService.ts` using fetch or axios for manifest + bundle downloads
-- Background download support via `react-native-background-downloader`
-- Verify sha256 using `react-native-crypto` or native module
-- Atomic DB swap using `react-native-fs` (`RNFS.moveFile()`)
+**Expo sync module (TypeScript):**
+- `ContentSyncService.ts` using native `fetch` for manifest + bundle downloads
+- Resumable download support via `expo-file-system` `createDownloadResumable()`
+- Verify sha256 using `expo-crypto`
+- Atomic DB swap using `expo-file-system` (`FileSystem.moveAsync()`)
 - FTS tables must be prebuilt in downloaded content.db (no runtime index creation)
 
 **Sync flow:**
 - Read latest version from Convex via HTTP/Convex client
 - Compare with cached version (stored in AsyncStorage)
-- Download manifest + bundle
-- Verify hash/signature before import
-- Close all SQLite connections
+- Download manifest + bundle using `expo-file-system`
+- Verify hash/signature before import using `expo-crypto`
+- Close all SQLite connections via `expo-sqlite`
 - Perform atomic file swap (keep previous version for rollback)
 - Reopen SQLite connections
 
@@ -1701,51 +1785,62 @@ Screenshots should highlight:
 
 ### What's shared (everything!)
 
-With React Native, almost all code is shared between iOS and Android:
+With Expo React Native, almost all code is shared between iOS and Android:
 
 **Shared TypeScript code (in `src/` directory):**
 - All UI code (React Native components)
 - All business logic (hooks, context, engines)
-- Database access layer (SQLite wrapper)
-- Services (location, downloads, sync)
+- Database access layer (`expo-sqlite` wrapper)
+- Services (`expo-location`, `expo-file-system`, sync)
 - Engines (pricing, planning, routing, geo)
 - Navigation
 - Theme and styling
 
 **Shared content (in `shared/` directory):**
 - Content JSON files (places, prices, phrases, itineraries, tips, culture)
-- Content validation scripts (TypeScript/Node)
+- Content validation scripts (TypeScript/Node with Zod)
 - SQLite database build scripts (JSON → content.db)
 - JSON Schema definitions
 - Content changelog generation
 - Asset pipeline (image compression, audio encoding)
 
-**Platform-specific (minimal):**
-- `ios/` - Xcode project, CocoaPods, native module bridges if needed
-- `android/` - Gradle project, native module bridges if needed
-- Platform-specific assets (app icons, splash screens)
+**Platform-specific (minimal, managed by Expo):**
+- `ios/` - Generated by `expo prebuild`, Xcode project
+- `android/` - Generated by `expo prebuild`, Gradle project
+- Platform-specific configuration in `app.json` / `app.config.js`
+- Config plugins for native customization (permissions, splash screens)
 
 ### Development workflow
 
-1. **Content updates:** Edit JSON in `shared/content/`, run validation, build `content.db`, copy to both apps
-2. **Development:** Run `npx react-native start` for Metro bundler
-3. **iOS testing:** Run `npx react-native run-ios` or open Xcode for device testing
-4. **Android testing:** Run `npx react-native run-android` or open Android Studio for device testing
-5. **Unit testing:** Run `npm test` for Jest tests (engines, hooks, utilities)
-6. **E2E testing:** Use Detox or Maestro for end-to-end tests on both platforms
-7. **Release:** Build release bundles and submit to App Store and Play Store
+1. **Content updates:** Edit JSON in `shared/content/`, run validation, build `content.db`, copy to `assets/seed/`
+2. **Development:** Run `npx expo start` to start Metro bundler with Expo Dev Tools
+3. **Development build:** Create with `eas build --profile development --platform ios` (or android)
+4. **iOS testing:** Run development build on iOS Simulator or physical device
+5. **Android testing:** Run development build on Android Emulator or physical device
+6. **Unit testing:** Run `npm test` for Jest tests (engines, hooks, utilities)
+7. **E2E testing:** Use Maestro for end-to-end tests on both platforms
+8. **Release:** Build with EAS and submit via EAS Submit
 
 ### Development commands
 
 ```bash
-# Start Metro bundler
-npm start
+# Start Expo development server
+npx expo start
 
-# Run on iOS simulator
-npm run ios
+# Start with dev client (for native modules)
+npx expo start --dev-client
 
-# Run on Android emulator
-npm run android
+# Create development build (iOS)
+eas build --profile development --platform ios
+
+# Create development build (Android)
+eas build --profile development --platform android
+
+# Run on iOS simulator (after installing dev build)
+npx expo start --ios
+
+# Run on Android emulator (after installing dev build)
+npx expo start --android
 
 # Run tests
 npm test
@@ -1757,11 +1852,20 @@ npm run build:content
 npm run lint
 npm run typecheck
 
-# Build release (iOS)
-cd ios && xcodebuild -scheme MarrakechGuide -configuration Release
+# Generate native projects (for debugging native code)
+npx expo prebuild
 
-# Build release (Android)
-cd android && ./gradlew assembleRelease
+# Build production release (iOS)
+eas build --profile production --platform ios
+
+# Build production release (Android)
+eas build --profile production --platform android
+
+# Submit to App Store
+eas submit --platform ios
+
+# Submit to Play Store
+eas submit --platform android
 ```
 
 ### Code quality checklist
@@ -1781,16 +1885,17 @@ Maintain quality across the single codebase:
 - Jest unit tests pass (engines, hooks, utilities)
 - Validate content schema + references on every PR
 - Build `content.db` and ensure it includes required tables + FTS tables
-- Verify both app bundles are using the latest `content.db` generated from `shared/content/` (no stale seed DBs)
-- Build succeeds on both iOS and Android
+- Verify `assets/seed/content.db` is the latest version generated from `shared/content/`
+- EAS Build succeeds on both iOS and Android (use `eas build --profile preview`)
 - Generate changelog artifact used for in-app "What's new" + store notes
 
 ### Trust & reliability gates (additions)
 
 - Pack integrity test: verify manifests + sha256 + install/uninstall flows (simulated)
 - Offline smoke test script: core flows must work in airplane mode
-- Forbidden-permissions check (AndroidManifest + iOS Info.plist):
+- Forbidden-permissions check (`app.json` permissions configuration):
   - fail build if contacts/photos permissions appear
+  - validate only `expo-location` foreground permission is requested
 
 ### Schema-driven codegen (recommended)
 
@@ -1811,8 +1916,9 @@ The app is "ready to sell" when:
 - Store pages (App Store + Play Store) clearly communicate the value in 5 seconds
 - Offline promise is validated via a repeatable test checklist (airplane mode + interrupted update + low storage)
 - Both platforms pass accessibility audits (VoiceOver + TalkBack)
-- If using Option A (paid up-front): no billing flows; app is fully accessible after paid install
-- If using Option B (free + unlock): purchase + restore flows are reliable and clearly explained (still usable offline after unlock)
-- React Native app performs smoothly on mid-tier devices (no jank, fast startup)
+- Option A (paid up-front) implemented: no billing flows; app is fully accessible after paid install
+- Expo app performs smoothly on mid-tier devices (no jank, fast startup)
 - No JS errors or yellow boxes in release builds
 - Same user experience on iOS and Android (single codebase advantage)
+- EAS Build produces valid App Store / Play Store binaries
+- EAS Submit successfully uploads to both stores
