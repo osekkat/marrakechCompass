@@ -422,7 +422,475 @@ These rules prevent "it feels off" moments that undermine trust in a paid utilit
 
 ### Visual design language (Marrakech identity)
 
-The app should feel unmistakably rooted in Marrakech while staying modern and readable.
+The app should feel unmistakably rooted in Marrakech while staying modern and readable. This design system is adapted from the web reference implementation at [marrakech-compass](https://github.com/osekkat/marrakech-compass).
+
+#### Design Philosophy
+
+- **Warm & Culturally Inspired:** The palette draws from Marrakech's iconic colors — terracotta walls, Majorelle blue gardens, and golden souks
+- **Modern Minimalism with Moroccan Accents:** Clean UI patterns with cultural color cues
+- **Professional yet Approachable:** Tourist app with local authenticity
+- **Pattern as Texture:** Use Islamic geometric patterns as subtle background texture, never overwhelming content
+
+---
+
+#### Color System
+
+**Primary Palette (Moroccan-inspired)**
+
+| Token | HSL Value | Hex | Usage |
+|-------|-----------|-----|-------|
+| `terracotta` (Primary) | `hsl(14, 65%, 45%)` | `#BD5D3A` | Primary actions, active states, brand identity |
+| `terracotta-light` | `hsl(14, 60%, 60%)` | `#D88066` | Hover states, lighter accents |
+| `terracotta-dark` | `hsl(14, 70%, 35%)` | `#983D24` | Pressed states, emphasis |
+| `majorelle` (Secondary) | `hsl(220, 75%, 45%)` | `#1D4ED8` | Secondary actions, informational elements |
+| `majorelle-light` | `hsl(220, 70%, 60%)` | `#5B8DEF` | Hover states |
+| `majorelle-dark` | `hsl(220, 80%, 35%)` | `#1E3A8A` | Pressed states |
+| `gold` (Accent) | `hsl(40, 85%, 55%)` | `#E5A833` | Highlights, special callouts, icons |
+| `gold-light` | `hsl(40, 80%, 70%)` | `#F0C56E` | Light accents |
+| `gold-dark` | `hsl(40, 90%, 40%)` | `#C77D0A` | Strong accents |
+
+**Semantic Colors**
+
+| Token | HSL Value | Usage |
+|-------|-----------|-------|
+| `success` (Mint Green) | `hsl(158, 55%, 40%)` | Success states, "Great price" indicator |
+| `warning` (Warm Amber) | `hsl(35, 90%, 50%)` | Warnings, "High price" indicator |
+| `destructive` (Red) | `hsl(0, 70%, 50%)` | Errors, "Very high price" indicator |
+
+**Background & Surface Colors (Light Mode)**
+
+| Token | HSL Value | Usage |
+|-------|-----------|-------|
+| `background` | `hsl(35, 30%, 97%)` | Main app background (warm cream) |
+| `card` | `hsl(35, 25%, 99%)` | Card surfaces (slightly warmer) |
+| `muted` | `hsl(35, 20%, 92%)` | Muted backgrounds (warm sand) |
+| `border` | `hsl(30, 20%, 88%)` | Subtle warm borders |
+| `sand` | `hsl(35, 30%, 85%)` | Decorative sand tones |
+
+**Dark Mode Colors**
+
+| Token | HSL Value | Usage |
+|-------|-----------|-------|
+| `background` | `hsl(20, 25%, 8%)` | Dark background (warm, not cold) |
+| `foreground` | `hsl(35, 20%, 95%)` | Light text on dark |
+| `card` | `hsl(20, 25%, 12%)` | Dark card surfaces |
+| `primary` | `hsl(14, 60%, 55%)` | Terracotta (slightly lighter) |
+| `border` | `hsl(20, 20%, 20%)` | Subtle dark borders |
+
+**Price Fairness Indicator Colors**
+
+| Level | Background | Text | Border |
+|-------|------------|------|--------|
+| Low (Great Price) | `success/15%` | `success` | `success/30%` |
+| Fair | `accent/15%` | `accent-foreground` | `accent/30%` |
+| High | `warning/15%` | `warning-foreground` | `warning/30%` |
+| Very High | `destructive/15%` | `destructive` | `destructive/30%` |
+
+**Gradients**
+
+```typescript
+// src/shared/theme/gradients.ts
+export const gradients = {
+  sunset: ['hsl(14, 65%, 45%)', 'hsl(40, 85%, 55%)'], // Terracotta → Gold
+  morocco: ['hsl(35, 30%, 97%)', 'hsl(35, 25%, 92%)'], // Cream → Sand
+  blue: ['hsl(220, 75%, 45%)', 'hsl(220, 70%, 60%)'],  // Majorelle gradient
+};
+```
+
+---
+
+#### Typography
+
+**Font Families**
+
+| Purpose | Font | Weights | Usage |
+|---------|------|---------|-------|
+| Display/Headings | `Playfair Display` (serif) | 400, 500, 600, 700 | H1-H4, hero text, place names |
+| Body/UI | `Inter` (sans-serif) | 300, 400, 500, 600, 700 | Body text, buttons, labels |
+
+**Typography Scale (React Native)**
+
+```typescript
+// src/shared/theme/typography.ts
+export const typography = {
+  // Display (Playfair Display)
+  displayLarge: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 32, lineHeight: 40, letterSpacing: -0.5 },
+  displayMedium: { fontFamily: 'PlayfairDisplay-SemiBold', fontSize: 28, lineHeight: 36, letterSpacing: -0.3 },
+  displaySmall: { fontFamily: 'PlayfairDisplay-SemiBold', fontSize: 24, lineHeight: 32, letterSpacing: -0.2 },
+  
+  // Headings (Playfair Display)
+  headlineLarge: { fontFamily: 'PlayfairDisplay-SemiBold', fontSize: 22, lineHeight: 28 },
+  headlineMedium: { fontFamily: 'PlayfairDisplay-Medium', fontSize: 18, lineHeight: 24 },
+  headlineSmall: { fontFamily: 'PlayfairDisplay-Medium', fontSize: 16, lineHeight: 22 },
+  
+  // Body (Inter)
+  bodyLarge: { fontFamily: 'Inter-Regular', fontSize: 16, lineHeight: 24 },
+  bodyMedium: { fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20 },
+  bodySmall: { fontFamily: 'Inter-Regular', fontSize: 12, lineHeight: 16 },
+  
+  // Labels (Inter)
+  labelLarge: { fontFamily: 'Inter-Medium', fontSize: 14, lineHeight: 20 },
+  labelMedium: { fontFamily: 'Inter-Medium', fontSize: 12, lineHeight: 16 },
+  labelSmall: { fontFamily: 'Inter-Medium', fontSize: 11, lineHeight: 14 },
+  
+  // Buttons (Inter)
+  button: { fontFamily: 'Inter-SemiBold', fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
+  buttonSmall: { fontFamily: 'Inter-SemiBold', fontSize: 12, lineHeight: 16 },
+};
+```
+
+---
+
+#### Spacing & Layout
+
+**Spacing Scale**
+
+```typescript
+// src/shared/theme/spacing.ts
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  '2xl': 32,
+  '3xl': 48,
+  '4xl': 64,
+};
+
+export const layout = {
+  containerPadding: 16,          // Standard screen padding
+  cardPadding: 16,               // Card internal padding
+  sectionGap: 24,                // Gap between major sections
+  itemGap: 12,                   // Gap between list items
+  touchTarget: 44,               // Minimum touch target (iOS standard)
+  touchTargetAndroid: 48,        // Minimum touch target (Android standard)
+  borderRadius: 12,              // Standard corner radius (0.75rem)
+  borderRadiusSmall: 8,          // Smaller elements
+  borderRadiusFull: 9999,        // Pills/chips
+  tabBarHeight: 80,              // Bottom tab bar height (with safe area)
+};
+```
+
+**Shadows**
+
+```typescript
+// src/shared/theme/shadows.ts (React Native)
+import { Platform } from 'react-native';
+
+export const shadows = {
+  soft: Platform.select({
+    ios: {
+      shadowColor: 'hsl(20, 25%, 15%)',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+    },
+    android: { elevation: 2 },
+  }),
+  
+  card: Platform.select({
+    ios: {
+      shadowColor: 'hsl(20, 25%, 15%)',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    },
+    android: { elevation: 4 },
+  }),
+  
+  elevated: Platform.select({
+    ios: {
+      shadowColor: 'hsl(20, 25%, 15%)',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+    },
+    android: { elevation: 8 },
+  }),
+  
+  tabBar: Platform.select({
+    ios: {
+      shadowColor: 'hsl(20, 25%, 15%)',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+    },
+    android: { elevation: 8 },
+  }),
+};
+```
+
+---
+
+#### Component Styling Patterns
+
+**Buttons**
+
+| Variant | Background | Text | Border | Usage |
+|---------|------------|------|--------|-------|
+| `default` | `terracotta` | white | none | Primary CTAs |
+| `secondary` | `majorelle` | white | none | Secondary actions |
+| `outline` | transparent | `terracotta` | `terracotta` | Tertiary actions |
+| `ghost` | transparent | foreground | none | Subtle actions |
+| `destructive` | `destructive` | white | none | Delete/cancel |
+
+| Size | Height | Padding | Font |
+|------|--------|---------|------|
+| `sm` | 36 | 12h × 8v | buttonSmall |
+| `default` | 44 | 16h × 10v | button |
+| `lg` | 52 | 24h × 14v | button |
+| `icon` | 44 × 44 | centered | — |
+
+```typescript
+// Button style example
+const buttonStyles = {
+  default: {
+    backgroundColor: colors.terracotta,
+    borderRadius: layout.borderRadius,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: layout.touchTarget,
+  },
+  pressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+};
+```
+
+**Cards**
+
+```typescript
+// Card variants
+const cardStyles = {
+  // Standard card
+  base: {
+    backgroundColor: colors.card,
+    borderRadius: layout.borderRadius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  
+  // Interactive card (places, prices)
+  action: {
+    // On press: add border highlight
+    pressedBorderColor: `${colors.terracotta}33`, // 20% opacity
+    pressedScale: 0.98,
+  },
+  
+  // Glass effect card
+  glass: {
+    backgroundColor: `${colors.card}CC`, // 80% opacity
+    // Note: backdrop blur requires react-native-blur or similar
+    borderWidth: 1,
+    borderColor: `${colors.border}80`, // 50% opacity
+  },
+  
+  // Elevated card
+  elevated: {
+    ...shadows.elevated,
+  },
+};
+```
+
+**Badges/Chips**
+
+```typescript
+const chipStyles = {
+  base: {
+    borderRadius: layout.borderRadiusFull,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  
+  variants: {
+    primary: { backgroundColor: `${colors.terracotta}1A`, color: colors.terracotta }, // 10% bg
+    secondary: { backgroundColor: `${colors.majorelle}1A`, color: colors.majorelle },
+    success: { backgroundColor: `${colors.success}1A`, color: colors.success },
+    muted: { backgroundColor: colors.muted, color: colors.mutedForeground },
+  },
+  
+  // "Open now" chip
+  openNow: { backgroundColor: `${colors.success}1A`, color: colors.success },
+  
+  // Price range chip
+  priceRange: { backgroundColor: `${colors.gold}1A`, color: colors.goldDark },
+};
+```
+
+**Bottom Tab Bar**
+
+```typescript
+const tabBarStyles = {
+  container: {
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    ...shadows.tabBar,
+    // Add safe area padding at bottom
+  },
+  
+  tab: {
+    active: { color: colors.terracotta },
+    inactive: { color: colors.mutedForeground },
+  },
+  
+  indicator: {
+    backgroundColor: colors.terracotta,
+    height: 3,
+    borderRadius: 1.5,
+  },
+};
+```
+
+---
+
+#### Moroccan Pattern Overlay
+
+Use a subtle Moroccan geometric pattern as background texture for:
+- Onboarding screens
+- Empty states
+- Section headers
+- Share cards
+
+```typescript
+// Pattern usage (as SVG background or image)
+const moroccanPattern = {
+  // SVG pattern at 5% opacity over terracotta
+  opacity: 0.05,
+  color: colors.terracotta,
+  
+  // Apply to:
+  // - Full-screen backgrounds (onboarding)
+  // - Card headers (decorative)
+  // - Loading skeletons
+  // - Share card backgrounds
+};
+```
+
+---
+
+#### Animations & Transitions
+
+**Keyframe Animations**
+
+```typescript
+// Using react-native-reanimated
+const animations = {
+  fadeIn: {
+    from: { opacity: 0, translateY: 8 },
+    to: { opacity: 1, translateY: 0 },
+    duration: 300,
+    easing: Easing.out(Easing.ease),
+  },
+  
+  slideUp: {
+    from: { translateY: '100%' },
+    to: { translateY: 0 },
+    duration: 300,
+    easing: Easing.out(Easing.ease),
+  },
+  
+  scaleIn: {
+    from: { scale: 0.95, opacity: 0 },
+    to: { scale: 1, opacity: 1 },
+    duration: 200,
+    easing: Easing.out(Easing.ease),
+  },
+  
+  pulseSoft: {
+    // For loading states
+    keyframes: [1, 0.7, 1],
+    duration: 2000,
+    loop: true,
+  },
+};
+```
+
+**Transition Defaults**
+
+```typescript
+const transitions = {
+  fast: 150,      // Button press, hover
+  normal: 200,    // Color changes, small movements
+  slow: 300,      // Page transitions, modals
+  spring: { damping: 15, stiffness: 150 }, // Bouncy interactions
+};
+```
+
+---
+
+#### Accessibility
+
+- **Touch Targets:** Minimum 44×44pt (iOS) / 48×48dp (Android)
+- **Contrast:** All text meets WCAG AA contrast requirements
+- **Pattern Usage:** Never place patterns behind body text; patterns are decorative only
+- **Dark Mode:** Maintains warm tones (not cold blue/purple themes)
+- **Dynamic Type:** Support iOS Dynamic Type and Android font scaling
+- **Focus Order:** Logical focus order for VoiceOver/TalkBack
+
+---
+
+#### Design Tokens Summary (Theme File)
+
+```typescript
+// src/shared/theme/index.ts
+export const theme = {
+  colors: {
+    // Primary
+    primary: 'hsl(14, 65%, 45%)',
+    primaryLight: 'hsl(14, 60%, 60%)',
+    primaryDark: 'hsl(14, 70%, 35%)',
+    
+    // Secondary
+    secondary: 'hsl(220, 75%, 45%)',
+    secondaryLight: 'hsl(220, 70%, 60%)',
+    secondaryDark: 'hsl(220, 80%, 35%)',
+    
+    // Accent
+    accent: 'hsl(40, 85%, 55%)',
+    accentLight: 'hsl(40, 80%, 70%)',
+    accentDark: 'hsl(40, 90%, 40%)',
+    
+    // Semantic
+    success: 'hsl(158, 55%, 40%)',
+    warning: 'hsl(35, 90%, 50%)',
+    destructive: 'hsl(0, 70%, 50%)',
+    
+    // Surfaces
+    background: 'hsl(35, 30%, 97%)',
+    card: 'hsl(35, 25%, 99%)',
+    muted: 'hsl(35, 20%, 92%)',
+    border: 'hsl(30, 20%, 88%)',
+    
+    // Text
+    foreground: 'hsl(20, 25%, 10%)',
+    mutedForeground: 'hsl(20, 15%, 45%)',
+  },
+  
+  // ... spacing, typography, shadows from above
+};
+
+// Dark mode overrides
+export const darkTheme = {
+  colors: {
+    ...theme.colors,
+    background: 'hsl(20, 25%, 8%)',
+    foreground: 'hsl(35, 20%, 95%)',
+    card: 'hsl(20, 25%, 12%)',
+    primary: 'hsl(14, 60%, 55%)',
+    border: 'hsl(20, 20%, 20%)',
+    muted: 'hsl(20, 20%, 15%)',
+    mutedForeground: 'hsl(35, 15%, 60%)',
+  },
+};
+```
+
+---
+
+#### Implementation Notes
 
 - Use **Islamic geometric patterns** as a recurring motif in surfaces and separators (cards, section headers, onboarding backgrounds, loading/skeleton states, share cards).
 - Keep patterns subtle and low-contrast behind content so legibility always wins over decoration.
