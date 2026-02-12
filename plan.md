@@ -2246,6 +2246,8 @@ A user-facing screen that builds confidence and reduces "why should I trust this
 - Works on low-memory devices
 - Map view doesn't crash with many markers (keep curated marker count reasonable; enforce a marker budget via clustering/progressive disclosure)
 - Search works fast across content
+- Optional-pack-missing flows degrade gracefully (no dead-end screens)
+- Upgrade from previous store version preserves user state + pack registry
 - All external links open correctly
 - Dark mode works correctly
 - RTL text (Arabic) renders correctly in phrasebook
@@ -2288,6 +2290,10 @@ Add "paid app" reliability basics:
   - content update download interrupted (resume works)
   - low storage during download (clear error message)
   - app killed mid-import (must recover safely on next launch)
+  - app updated from N-1/N-2 with existing data (no data loss)
+  - IAP restore after reinstall (Option B) keeps entitlement offline
+- Permission contract:
+  - no location prompt until explicit user action (Near Me / Go Home / Navigate)
 - Observability:
   - Crash reporting: **opt-in preferred**, privacy-forward messaging in Privacy Center
   - On-device ring-buffer logs (redacted; no precise location; no user-entered notes)
@@ -2307,9 +2313,21 @@ For a paid, offline-first app where reliability is the core product promise, tes
 | Unit tests | Engines, utilities, formatters, hooks | >90% | Every commit |
 | Integration tests | Repositories + SQLite, services | >80% | CI on every PR |
 | Component tests | Critical UI components | Key components | CI on every PR |
-| E2E tests (Maestro) | Critical user journeys | 10+ scenarios | Pre-release |
-| Performance tests | Startup, search, rendering | Pass budgets | Pre-release |
+| E2E tests (Maestro) | Critical user journeys | 12+ scenarios | PR smoke + nightly full + pre-release |
+| Performance tests | Startup, search, rendering | Pass budgets | Nightly + pre-release on real devices |
 | Manual QA | Platform-specific, edge cases | Checklist | Before store submission |
+
+### Release blocker thresholds (explicit)
+
+Ship is blocked unless all of these are true for the release candidate:
+
+- P0/P1 open defects: **0**
+- Critical E2E pass rate: **100%** (one infra retry allowed)
+- Crash-free sessions during staged rollout: **>=99.7%**
+- Android vitals: **user-perceived ANR < 0.47%**, overall ANR < 0.70%
+- iOS crash/hang metrics: no regression versus previous production release
+- Performance budgets: pass on reference physical devices
+- Data integrity suites (upgrade matrix + chaos + rollback): no data-loss findings
 
 ### Unit tests
 
@@ -2561,7 +2579,23 @@ describe('DatabaseManager', () => {
     it('applies user.db migrations in order', async () => {});
     it('handles migration failure gracefully', async () => {});
     it('does not run already-applied migrations', async () => {});
+    it('migrates safely from N-1 to N with existing user state', async () => {});
+    it('migrates safely from N-2 to N with chained migrations', async () => {});
   });
+});
+```
+
+### Upgrade-path and migration matrix tests
+
+Every release candidate must test real upgrade paths, not just fresh installs.
+
+```typescript
+// __tests__/upgrade/upgradeMatrix.test.ts
+describe('Upgrade matrix', () => {
+  it('upgrades N-1 -> N and preserves favorites/recents/homeBase/activeRoute', async () => {});
+  it('upgrades N-2 -> N and applies chained migrations safely', async () => {});
+  it('keeps installed packs and registry state consistent after upgrade', async () => {});
+  it('rolls back safely to last-known-good state if migration fails', async () => {});
 });
 ```
 
@@ -2699,7 +2733,9 @@ maestro/
 │   ├── 09-download-pack-flow.yaml
 │   ├── 10-content-update-flow.yaml
 │   ├── 11-low-storage-recovery.yaml
-│   └── 12-permission-denial-paths.yaml
+│   ├── 12-permission-denial-paths.yaml
+│   ├── 13-iap-unlock-and-restore.yaml
+│   └── 14-missing-optional-pack-fallback.yaml
 ├── utils/
 │   └── common-assertions.yaml
 └── config.yaml
@@ -2836,6 +2872,38 @@ appId: com.marrakechcompass.app
 - assertVisible: "Copy address"  # Fallback still works
 - assertVisible: "Show taxi driver"  # Fallback still works
 - assertNotVisible: "Compass"  # Compass hidden without permission
+
+# maestro/flows/13-iap-unlock-and-restore.yaml
+# Scenario: One-time unlock + restore behaves correctly
+appId: com.marrakechcompass.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Preview"
+- tapOn: "Unlock full Marrakech"
+- runFlow: "iap-sandbox-purchase-success"  # helper flow
+- assertVisible: "Unlocked"
+- runFlow: "kill-and-relaunch"
+- assertVisible: "Unlocked"  # entitlement persisted
+- tapOn: "Restore purchases"
+- assertVisible: "Purchase restored"
+- toggleAirplaneMode: true
+- assertVisible: "Unlocked"  # offline relaunch still unlocked
+- toggleAirplaneMode: false
+
+# maestro/flows/14-missing-optional-pack-fallback.yaml
+# Scenario: Missing optional pack never creates a dead-end
+appId: com.marrakechcompass.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "More"
+- tapOn: "Itineraries"
+- tapOn: "1-day first timer"
+- tapOn: "Start route"
+- assertVisible: "Offline map pack not installed"
+- assertVisible: "Continue with compass guidance"  # Level 0 fallback
+- assertVisible: "Download pack"
 ```
 
 ### Security and integrity tests
@@ -2885,9 +2953,42 @@ describe('PackRegistry', () => {
 });
 ```
 
+### IAP and entitlement tests (Option B required)
+
+If monetization is Option B, purchase and restore flows are release-critical.
+
+```typescript
+// __tests__/services/IAPService.test.ts
+describe('IAPService', () => {
+  it('unlocks full content after successful purchase', async () => {});
+  it('restores entitlement after reinstall on same store account', async () => {});
+  it('persists unlocked entitlement for offline relaunch', async () => {});
+  it('handles pending/deferred transactions without duplicate unlocks', async () => {});
+  it('keeps preview content usable when store APIs are unavailable', async () => {});
+});
+```
+
+### Fault-injection (chaos) tests for offline reliability
+
+```typescript
+// __tests__/chaos/contentActivation.chaos.test.ts
+describe('Content activation chaos', () => {
+  it('survives process kill during download, verify, and swap', async () => {});
+  it('handles ENOSPC during unpack with clear recovery UX', async () => {});
+  it('recovers when WAL/SHM files are unexpectedly present', async () => {});
+  it('repairs filesystem/registry mismatch on next launch', async () => {});
+});
+```
+
 ### Performance tests
 
 Define performance budgets and enforce them.
+
+Use two layers:
+- CI smoke performance tests (quick regression signals)
+- Device-level release profiling (authoritative gate on real hardware)
+
+For release gates, measure on **physical release builds** and store p50/p95 across >=30 cold launches per reference device.
 
 **Budgets:**
 
@@ -2939,6 +3040,11 @@ describe('Memory usage', () => {
 });
 ```
 
+**Authoritative device instrumentation (release gates):**
+- iOS: Xcode Instruments + MetricKit (startup, hangs, memory)
+- Android: Macrobenchmark/Perfetto (startup, jank/FPS, memory)
+- Persist reports as CI artifacts and compare against previous release
+
 ### Offline simulation tests
 
 Test offline behavior in CI without real network.
@@ -2978,6 +3084,18 @@ describe('Offline graceful degradation', () => {
     render(<EventsScreen />);
     expect(await screen.findByText(/last updated/i)).toBeTruthy();
   });
+});
+```
+
+### Privacy and permission contract tests
+
+```typescript
+// __tests__/privacy/permissionsContract.test.ts
+describe('Permission contract', () => {
+  it('does not prompt location until user taps Near Me/Go Home/Navigate', async () => {});
+  it('keeps core flows usable when location permission is denied', async () => {});
+  it('redacts precise coordinates from debug report export', async () => {});
+  it('fails CI if contacts/photos permissions are introduced', async () => {});
 });
 ```
 
@@ -3051,6 +3169,18 @@ describe('Translation fallback', () => {
     expect(result).not.toBe('');
     expect(result).not.toBe('common.save');
   });
+});
+```
+
+### Time, timezone, and calendar edge tests
+
+```typescript
+// __tests__/time/openNowAndFreshness.test.ts
+describe('Open-now and freshness edge cases', () => {
+  it('handles DST transitions in Africa/Casablanca correctly', () => {});
+  it('handles timezone changes while app is running', () => {});
+  it('applies Ramadan/holiday exceptions over weekly hours', () => {});
+  it('keeps staleness labels correct across local date boundaries', () => {});
 });
 ```
 
@@ -3275,6 +3405,20 @@ jobs:
         run: maestro test maestro/flows/
 ```
 
+### CI lane strategy (fast feedback + full confidence)
+
+- **PR fast lane (<15 min):** typecheck, lint, unit/integration/component tests, content validation, permission checks, and critical Maestro smoke flows (`01`, `03`, `12`, `14`)
+- **Nightly full lane:** full Maestro suite + upgrade matrix + IAP sandbox + chaos tests + device-level performance profiling
+- **Release candidate lane:** run nightly suite against the exact release build artifact before submit
+- Publish failure artifacts: videos/screenshots, app logs, test reports, perf traces
+
+### Test flake policy
+
+- Auto-retry failing E2E/perf tests once (infra noise guard)
+- Track flaky tests by owner and flake rate
+- If flake rate >2% over 7 days: quarantine test + create fix ticket
+- Quarantined tests run nightly but do not gate PRs; critical-flow tests cannot remain quarantined at release time
+
 ### Test commands (package.json)
 
 ```json
@@ -3284,11 +3428,19 @@ jobs:
     "test:unit": "jest --testPathPattern='__tests__/(engines|utils|hooks)'",
     "test:integration": "jest --testPathPattern='__tests__/(repositories|database|services)'",
     "test:components": "jest --testPathPattern='__tests__/components'",
+    "test:upgrade": "jest --testPathPattern='__tests__/upgrade|__tests__/database/.*migration'",
+    "test:iap": "jest --testPathPattern='__tests__/iap|__tests__/services/IAPService'",
+    "test:chaos": "jest --testPathPattern='__tests__/chaos'",
     "test:performance": "jest --testPathPattern='__tests__/performance'",
     "test:offline": "jest --testPathPattern='__tests__/offline'",
+    "test:privacy": "jest --testPathPattern='__tests__/privacy'",
     "test:localization": "jest --testPathPattern='__tests__/localization'",
-    "test:e2e": "maestro test maestro/flows/",
+    "test:time": "jest --testPathPattern='__tests__/time'",
+    "test:e2e": "npm run test:e2e:full",
+    "test:e2e:critical": "maestro test maestro/flows/01-fresh-install-offline.yaml maestro/flows/03-quote-action-flow.yaml maestro/flows/12-permission-denial-paths.yaml maestro/flows/14-missing-optional-pack-fallback.yaml",
     "test:e2e:smoke": "maestro test maestro/flows/01-fresh-install-offline.yaml",
+    "test:e2e:full": "maestro test maestro/flows/",
+    "test:nightly": "npm run test && npm run test:upgrade && npm run test:iap && npm run test:chaos && npm run test:e2e:full",
     "validate:content": "ts-node shared/scripts/validate-content.ts",
     "check:links": "ts-node shared/scripts/check-links.ts",
     "check:permissions": "ts-node shared/scripts/check-permissions.ts",
@@ -3309,6 +3461,7 @@ In addition to automated tests, complete this checklist before every store submi
 - [ ] Quote → Action works offline
 - [ ] Go Home compass works offline
 - [ ] Route Cards work offline
+- [ ] Core screens remain usable when optional packs are missing (clear fallback + Downloads CTA)
 - [ ] Downloads resume after app kill
 
 **Platform-specific:**
@@ -3323,10 +3476,20 @@ In addition to automated tests, complete this checklist before every store submi
 **Edge cases:**
 - [ ] Low storage: clear error message, no crash
 - [ ] Permission denied: app still usable
+- [ ] No location prompt appears before explicit user intent (Near Me / Go Home / Navigate)
 - [ ] Content update interrupted: safe recovery
 - [ ] App killed during route: progress persists
+- [ ] Upgrade path N-1 -> N preserves user state + pack registry
+- [ ] Upgrade path N-2 -> N applies chained migrations safely
+- [ ] DST/timezone changes do not break Open now and freshness labels
 - [ ] Very long place names: text doesn't overflow
 - [ ] Empty search results: helpful message
+
+**Monetization (Option B):**
+- [ ] Unlock purchase succeeds in sandbox on iOS and Android
+- [ ] Restore purchases works after reinstall
+- [ ] Unlocked entitlement is honored offline after relaunch
+- [ ] Preview-only path still delivers useful offline value
 
 **Visual:**
 - [ ] Dark mode: all screens look correct
@@ -3557,6 +3720,7 @@ See **Section 12b (Test Strategy)** for complete test definitions and CI configu
 - Unit tests pass with >90% coverage on engines (Jest)
 - Integration tests pass (repositories + SQLite)
 - Component tests pass (React Native Testing Library)
+- Critical E2E smoke flows pass (`01`, `03`, `12`, `14`)
 - Validate content schema + references (`npm run validate:content`)
 - Build `content.db` and ensure it includes required tables + FTS tables
 - Verify `assets/seed/content.db` is the latest version generated from `shared/content/`
@@ -3564,8 +3728,9 @@ See **Section 12b (Test Strategy)** for complete test definitions and CI configu
 - EAS Build succeeds on both iOS and Android (use `eas build --profile preview`)
 
 **On merge to main:**
-- E2E tests pass (Maestro critical flows)
-- Performance tests pass budgets
+- Full E2E suite passes (Maestro all flows)
+- Upgrade matrix + IAP + chaos suites pass
+- Device-level performance tests pass budgets on reference devices
 - Generate changelog artifact for in-app "What's new" + store notes
 
 ### Trust & reliability gates (additions)
@@ -3577,8 +3742,19 @@ See **Section 12b (Test Strategy)** for complete test definitions and CI configu
   - `01-fresh-install-offline.yaml`: airplane mode install → explore → price card → quote → phrasebook
   - `04-home-base-setup.yaml` + `12-permission-denial-paths.yaml`: home base with permission denied path
   - `09-download-pack-flow.yaml`: pack install interrupted → resume → verify → activate
+  - `13-iap-unlock-and-restore.yaml`: purchase unlock + restore + offline entitlement check
+  - `14-missing-optional-pack-fallback.yaml`: missing optional pack still allows fallback guidance
   - `07-route-cards-execution.yaml`: route progress persists after app kill
 - Localization tests: all translations complete, RTL rendering correct, fallback works
+
+### Release-blocker policy (explicit)
+
+Do not ship if any of the following fail:
+- Any P0/P1 bug remains open
+- Critical E2E flows fail after one retry
+- Crash-free/ANR thresholds regress past targets
+- Upgrade, rollback, or chaos tests show possible data loss
+- Device-level performance budgets fail on reference hardware
 
 ### Schema-driven codegen (recommended)
 
