@@ -1437,8 +1437,39 @@ marrakechCompass/
 │   │   ├─ PricingEngine.test.ts
 │   │   ├─ PlanEngine.test.ts
 │   │   ├─ GeoEngine.test.ts
-│   │   └─ TrustEngine.test.ts
-│   └─ components/
+│   │   ├─ RouteEngine.test.ts
+│   │   ├─ TrustEngine.test.ts
+│   │   └─ TrustEngine.golden.test.ts
+│   ├─ repositories/
+│   │   ├─ PlaceRepository.test.ts
+│   │   ├─ PriceCardRepository.test.ts
+│   │   └─ FavoritesRepository.test.ts
+│   ├─ services/
+│   │   ├─ SearchService.test.ts
+│   │   └─ ContentSyncService.test.ts
+│   ├─ database/
+│   │   └─ DatabaseManager.test.ts
+│   ├─ components/
+│   │   ├─ FairnessMeter.test.tsx
+│   │   ├─ CompassArrow.test.tsx
+│   │   └─ ShareCardRenderer.test.tsx
+│   ├─ hooks/
+│   │   ├─ useQuoteAction.test.ts
+│   │   └─ useHomeBase.test.ts
+│   ├─ offline/
+│   │   └─ gracefulDegradation.test.ts
+│   ├─ localization/
+│   │   └─ translations.test.ts
+│   ├─ performance/
+│   │   └─ startup.perf.test.ts
+│   └─ fixtures/
+│       └─ trust-engine-golden.json
+│
+├─ maestro/                         # E2E tests
+│   └─ flows/
+│       ├─ 01-fresh-install-offline.yaml
+│       ├─ 03-quote-action-flow.yaml
+│       └─ 07-route-cards-execution.yaml
 │
 └─ convex/                          # Phase 2 only
     ├─ schema.ts
@@ -2050,8 +2081,67 @@ marrakechCompass/
 │   │   ├── PricingEngine.test.ts
 │   │   ├── PlanEngine.test.ts
 │   │   ├── GeoEngine.test.ts
-│   │   └── TrustEngine.test.ts
-│   └── components/
+│   │   ├── RouteEngine.test.ts
+│   │   ├── TrustEngine.test.ts
+│   │   └── TrustEngine.golden.test.ts
+│   ├── repositories/
+│   │   ├── PlaceRepository.test.ts
+│   │   ├── PriceCardRepository.test.ts
+│   │   ├── PhraseRepository.test.ts
+│   │   ├── FavoritesRepository.test.ts
+│   │   └── RecentsRepository.test.ts
+│   ├── services/
+│   │   ├── SearchService.test.ts
+│   │   ├── ContentSyncService.test.ts
+│   │   └── PackRegistry.test.ts
+│   ├── database/
+│   │   └── DatabaseManager.test.ts
+│   ├── components/
+│   │   ├── FairnessMeter.test.tsx
+│   │   ├── CompassArrow.test.tsx
+│   │   ├── PriceTag.test.tsx
+│   │   ├── OfflineBanner.test.tsx
+│   │   ├── OpenNowChip.test.tsx
+│   │   └── ShareCardRenderer.test.tsx
+│   ├── hooks/
+│   │   ├── useQuoteAction.test.ts
+│   │   ├── useHomeBase.test.ts
+│   │   ├── useRoute.test.ts
+│   │   └── useNetworkState.test.ts
+│   ├── utils/
+│   │   └── formatters.test.ts
+│   ├── offline/
+│   │   └── gracefulDegradation.test.ts
+│   ├── localization/
+│   │   ├── translations.test.ts
+│   │   ├── rtl.test.ts
+│   │   └── fallback.test.ts
+│   ├── performance/
+│   │   ├── startup.perf.test.ts
+│   │   ├── search.perf.test.ts
+│   │   └── memory.perf.test.ts
+│   └── fixtures/
+│       ├── trust-engine-golden.json
+│       ├── test-places.json
+│       └── test-price-cards.json
+│
+├── maestro/                     # E2E tests (Maestro)
+│   ├── flows/
+│   │   ├── 01-fresh-install-offline.yaml
+│   │   ├── 02-explore-and-price-check.yaml
+│   │   ├── 03-quote-action-flow.yaml
+│   │   ├── 04-home-base-setup.yaml
+│   │   ├── 05-go-home-compass.yaml
+│   │   ├── 06-my-day-builder.yaml
+│   │   ├── 07-route-cards-execution.yaml
+│   │   ├── 08-phrasebook-search.yaml
+│   │   ├── 09-download-pack-flow.yaml
+│   │   ├── 10-content-update-flow.yaml
+│   │   ├── 11-low-storage-recovery.yaml
+│   │   └── 12-permission-denial-paths.yaml
+│   ├── utils/
+│   │   └── common-assertions.yaml
+│   └── config.yaml
 │
 ├── convex/                      # Phase 2 only
 │   ├── schema.ts
@@ -2203,6 +2293,1046 @@ Add "paid app" reliability basics:
   - On-device ring-buffer logs (redacted; no precise location; no user-entered notes)
   - Export debug report includes pack/version state + recent redacted events (helps support without screenshots)
   - Operational quality gates: monitor **Android vitals** (crash + ANR rates) and iOS crash/hang metrics (Xcode Organizer/MetricKit) as release blockers, not "nice to haves"
+
+---
+
+## 12b) Test strategy (paid-app reliability)
+
+For a paid, offline-first app where reliability is the core product promise, testing must be comprehensive and automated. This section defines the complete test strategy.
+
+### Test pyramid overview
+
+| Layer | Scope | Coverage Target | When Run |
+|-------|-------|-----------------|----------|
+| Unit tests | Engines, utilities, formatters, hooks | >90% | Every commit |
+| Integration tests | Repositories + SQLite, services | >80% | CI on every PR |
+| Component tests | Critical UI components | Key components | CI on every PR |
+| E2E tests (Maestro) | Critical user journeys | 10+ scenarios | Pre-release |
+| Performance tests | Startup, search, rendering | Pass budgets | Pre-release |
+| Manual QA | Platform-specific, edge cases | Checklist | Before store submission |
+
+### Unit tests
+
+**Engines (pure TypeScript, no Expo imports):**
+
+All engines must be thoroughly unit tested since they contain core business logic.
+
+```typescript
+// __tests__/engines/PricingEngine.test.ts
+describe('PricingEngine', () => {
+  describe('calculateFairness', () => {
+    it('returns "fair" when quote is within expected range', () => {});
+    it('returns "low" when quote is below lowMultiplier threshold', () => {});
+    it('returns "high" when quote exceeds max but within highMultiplier', () => {});
+    it('returns "very_high" when quote exceeds highMultiplier', () => {});
+    it('applies context modifiers correctly (night, peak_season)', () => {});
+    it('uses per-card multiplier overrides when provided', () => {});
+    it('handles quantity correctly (per person, per item)', () => {});
+    it('generates correct counter-offer range', () => {});
+    it('selects appropriate negotiation scripts', () => {});
+  });
+});
+
+// __tests__/engines/PlanEngine.test.ts
+describe('PlanEngine', () => {
+  describe('generatePlan', () => {
+    it('respects availableMinutes constraint', () => {});
+    it('filters places by selected interests', () => {});
+    it('avoids closed places when hours are known', () => {});
+    it('clusters geographically to minimize backtracking', () => {});
+    it('respects bestTimeWindows (morning/afternoon/evening)', () => {});
+    it('adjusts stop count based on pace setting', () => {});
+    it('includes meal breaks at appropriate times', () => {});
+    it('handles empty interest selection gracefully', () => {});
+    it('returns empty plan when no places match constraints', () => {});
+  });
+});
+
+// __tests__/engines/GeoEngine.test.ts
+describe('GeoEngine', () => {
+  describe('haversine', () => {
+    it('calculates distance between two points correctly', () => {});
+    it('returns 0 for identical points', () => {});
+    it('handles antipodal points', () => {});
+  });
+  describe('bearing', () => {
+    it('calculates bearing correctly (north = 0)', () => {});
+    it('handles edge cases (same point, poles)', () => {});
+  });
+  describe('relativeAngle', () => {
+    it('computes arrow rotation correctly', () => {});
+    it('normalizes angles to 0-360 range', () => {});
+  });
+});
+
+// __tests__/engines/TrustEngine.test.ts
+describe('TrustEngine', () => {
+  describe('calculateFreshness', () => {
+    it('returns "fresh" when within staleAfterDays', () => {});
+    it('returns "stale" when beyond staleAfterDays', () => {});
+    it('returns "very_stale" when beyond 2x staleAfterDays', () => {});
+    it('uses field-specific TTLs (hours stricter than descriptions)', () => {});
+    it('factors in volatility (high volatility = stricter TTL)', () => {});
+    it('generates correct warning copy for each level', () => {});
+    it('returns showCTA=true when update action is available', () => {});
+  });
+});
+
+// __tests__/engines/RouteEngine.test.ts
+describe('RouteEngine', () => {
+  describe('estimateWalkTime', () => {
+    it('uses default speed for non-medina routes', () => {});
+    it('applies medina multiplier for medina routes', () => {});
+    it('uses precomputed matrix when available', () => {});
+    it('falls back to haversine estimate when matrix missing', () => {});
+  });
+  describe('advanceRoute', () => {
+    it('advances to next step correctly', () => {});
+    it('handles skip and reflows remaining route', () => {});
+    it('persists progress for resume after app kill', () => {});
+  });
+});
+```
+
+**TrustEngine golden file tests:**
+
+```typescript
+// __tests__/engines/TrustEngine.golden.test.ts
+import goldenCases from './fixtures/trust-engine-golden.json';
+
+describe('TrustEngine golden file tests', () => {
+  goldenCases.forEach((testCase) => {
+    it(`${testCase.name}`, () => {
+      const result = TrustEngine.calculateFreshness(testCase.input);
+      expect(result).toEqual(testCase.expected);
+    });
+  });
+});
+```
+
+**Utilities and formatters:**
+
+```typescript
+// __tests__/utils/formatters.test.ts
+describe('formatters', () => {
+  describe('formatMAD', () => {
+    it('formats currency correctly with thousands separator', () => {});
+    it('handles zero and negative values', () => {});
+  });
+  describe('formatDistance', () => {
+    it('shows meters for distances under 1km', () => {});
+    it('shows km with 1 decimal for distances over 1km', () => {});
+  });
+  describe('formatDuration', () => {
+    it('formats minutes correctly', () => {});
+    it('formats hours and minutes correctly', () => {});
+  });
+  describe('normalizeSearchQuery', () => {
+    it('normalizes Arabic-Indic digits to ASCII', () => {});
+    it('lowercases and trims input', () => {});
+    it('handles mixed Arabic/Latin text', () => {});
+  });
+});
+```
+
+### Integration tests (repositories + SQLite)
+
+Test the data layer with real SQLite databases (in-memory or temp files).
+
+```typescript
+// __tests__/repositories/PlaceRepository.test.ts
+describe('PlaceRepository', () => {
+  let db: SQLiteDatabase;
+  let repo: PlaceRepository;
+
+  beforeEach(async () => {
+    db = await openTestDatabase(); // in-memory SQLite
+    await seedTestData(db);
+    repo = new PlaceRepository(db);
+  });
+
+  afterEach(async () => {
+    await db.closeAsync();
+  });
+
+  describe('getAll', () => {
+    it('returns all places', async () => {});
+    it('maps database rows to Place objects correctly', async () => {});
+    it('parses JSON fields (aliases, tags, hours) correctly', async () => {});
+  });
+
+  describe('getById', () => {
+    it('returns place by id', async () => {});
+    it('returns null for non-existent id', async () => {});
+  });
+
+  describe('getByRegion', () => {
+    it('filters by region_id', async () => {});
+  });
+
+  describe('getByCategory', () => {
+    it('filters by category', async () => {});
+  });
+
+  describe('search', () => {
+    it('finds places by name', async () => {});
+    it('finds places by alias', async () => {});
+    it('ranks exact matches higher than partial matches', async () => {});
+    it('handles Arabic text correctly', async () => {});
+    it('normalizes Arabic-Indic digits in query', async () => {});
+  });
+});
+
+// __tests__/repositories/PriceCardRepository.test.ts
+describe('PriceCardRepository', () => {
+  // Similar structure to PlaceRepository
+  describe('getByCategory', () => {});
+  describe('search', () => {});
+  describe('getWithModifiers', () => {
+    it('parses context_modifiers JSON correctly', () => {});
+  });
+});
+
+// __tests__/repositories/FavoritesRepository.test.ts
+describe('FavoritesRepository', () => {
+  describe('add', () => {
+    it('adds favorite correctly', async () => {});
+    it('prevents duplicate favorites', async () => {});
+  });
+  describe('remove', () => {
+    it('removes favorite by content_type and content_id', async () => {});
+  });
+  describe('getAll', () => {
+    it('returns favorites ordered by created_at desc', async () => {});
+  });
+  describe('isFavorite', () => {
+    it('returns true for favorited items', async () => {});
+    it('returns false for non-favorited items', async () => {});
+  });
+});
+```
+
+**FTS5 search tests:**
+
+```typescript
+// __tests__/services/SearchService.test.ts
+describe('SearchService', () => {
+  describe('FTS5 search', () => {
+    it('finds results across places, prices, phrases', async () => {});
+    it('applies normalization at query time', async () => {});
+    it('handles prefix search correctly', async () => {});
+    it('returns results ranked by relevance', async () => {});
+    it('handles empty query gracefully', async () => {});
+    it('handles special characters without crashing', async () => {});
+  });
+
+  describe('Arabic-Indic digit normalization', () => {
+    it('normalizes ٠١٢٣٤٥٦٧٨٩ to 0123456789 at index time', async () => {});
+    it('normalizes query with Arabic-Indic digits', async () => {});
+    it('finds "50 MAD" when searching "٥٠"', async () => {});
+  });
+
+  describe('suggestions', () => {
+    it('returns "Did you mean?" suggestions for typos', async () => {});
+    it('suggests from aliases when no direct match', async () => {});
+  });
+});
+```
+
+**Database operations tests:**
+
+```typescript
+// __tests__/database/DatabaseManager.test.ts
+describe('DatabaseManager', () => {
+  describe('atomic swap', () => {
+    it('swaps content.db atomically', async () => {});
+    it('cleans up WAL/SHM files before swap', async () => {});
+    it('rolls back on verification failure', async () => {});
+    it('closes all connections before swap', async () => {});
+    it('reopens connections after swap', async () => {});
+  });
+
+  describe('integrity verification', () => {
+    it('passes PRAGMA quick_check on valid DB', async () => {});
+    it('detects corrupted database', async () => {});
+  });
+
+  describe('migration', () => {
+    it('applies user.db migrations in order', async () => {});
+    it('handles migration failure gracefully', async () => {});
+    it('does not run already-applied migrations', async () => {});
+  });
+});
+```
+
+### Component tests (React Native Testing Library)
+
+Test critical UI components in isolation.
+
+```typescript
+// __tests__/components/FairnessMeter.test.tsx
+import { render, screen } from '@testing-library/react-native';
+
+describe('FairnessMeter', () => {
+  it('renders "Great Price" for low fairness level', () => {
+    render(<FairnessMeter level="low" />);
+    expect(screen.getByText(/great price/i)).toBeTruthy();
+  });
+
+  it('renders "Fair" with correct color for fair level', () => {});
+  it('renders "High" with warning color for high level', () => {});
+  it('renders "Very High" with destructive color for very_high level', () => {});
+  it('shows confidence note when provided', () => {});
+});
+
+// __tests__/components/CompassArrow.test.tsx
+describe('CompassArrow', () => {
+  it('rotates arrow based on relative angle', () => {});
+  it('shows distance in meters when < 1km', () => {});
+  it('shows distance in km when >= 1km', () => {});
+  it('shows calibration needed state', () => {});
+  it('shows heading confidence indicator', () => {});
+});
+
+// __tests__/components/PriceTag.test.tsx
+describe('PriceTag', () => {
+  it('renders price range correctly', () => {});
+  it('shows "Last reviewed" date', () => {});
+  it('shows staleness warning when old', () => {});
+  it('formats MAD correctly with locale', () => {});
+});
+
+// __tests__/components/OfflineBanner.test.tsx
+describe('OfflineBanner', () => {
+  it('renders when offline', () => {});
+  it('hides when online', () => {});
+  it('shows "Core guide still works" message', () => {});
+});
+
+// __tests__/components/OpenNowChip.test.tsx
+describe('OpenNowChip', () => {
+  it('shows "Open now" when currently open', () => {});
+  it('shows "Closed" when currently closed', () => {});
+  it('hides when no hours data available', () => {});
+  it('handles timezone correctly', () => {});
+});
+```
+
+**Share card snapshot tests:**
+
+```typescript
+// __tests__/components/ShareCardRenderer.test.tsx
+describe('ShareCardRenderer', () => {
+  it('renders place share card correctly', () => {
+    const tree = render(<ShareCardRenderer type="place" data={mockPlace} />);
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders price card share card correctly', () => {
+    const tree = render(<ShareCardRenderer type="price_card" data={mockPriceCard} />);
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders quote result share card correctly', () => {
+    const tree = render(<ShareCardRenderer type="quote_result" data={mockQuoteResult} />);
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+});
+```
+
+### Hook tests
+
+```typescript
+// __tests__/hooks/useQuoteAction.test.ts
+import { renderHook, act } from '@testing-library/react-hooks';
+
+describe('useQuoteAction', () => {
+  it('calculates fairness when quote is entered', () => {});
+  it('updates result when context modifiers change', () => {});
+  it('saves quote to recents', () => {});
+  it('handles quantity changes correctly', () => {});
+});
+
+// __tests__/hooks/useHomeBase.test.ts
+describe('useHomeBase', () => {
+  it('loads saved home base on mount', () => {});
+  it('saves home base to user.db', () => {});
+  it('calculates distance and bearing when location available', () => {});
+  it('handles missing location gracefully', () => {});
+});
+
+// __tests__/hooks/useRoute.test.ts
+describe('useRoute', () => {
+  it('loads active route on mount', () => {});
+  it('advances to next stop', () => {});
+  it('handles skip correctly', () => {});
+  it('persists progress across app restarts', () => {});
+  it('calculates next stop distance and bearing', () => {});
+});
+
+// __tests__/hooks/useNetworkState.test.ts
+describe('useNetworkState', () => {
+  it('returns online when connected', () => {});
+  it('returns offline when disconnected', () => {});
+  it('detects Wi-Fi vs cellular', () => {});
+  it('updates when network state changes', () => {});
+});
+```
+
+### E2E tests (Maestro)
+
+Define critical user journeys that must pass before any release.
+
+**Directory structure:**
+
+```
+maestro/
+├── flows/
+│   ├── 01-fresh-install-offline.yaml
+│   ├── 02-explore-and-price-check.yaml
+│   ├── 03-quote-action-flow.yaml
+│   ├── 04-home-base-setup.yaml
+│   ├── 05-go-home-compass.yaml
+│   ├── 06-my-day-builder.yaml
+│   ├── 07-route-cards-execution.yaml
+│   ├── 08-phrasebook-search.yaml
+│   ├── 09-download-pack-flow.yaml
+│   ├── 10-content-update-flow.yaml
+│   ├── 11-low-storage-recovery.yaml
+│   └── 12-permission-denial-paths.yaml
+├── utils/
+│   └── common-assertions.yaml
+└── config.yaml
+```
+
+**Critical E2E scenarios:**
+
+```yaml
+# maestro/flows/01-fresh-install-offline.yaml
+# Scenario: App works offline immediately after fresh install
+appId: com.marrakechcompass.app
+---
+- launchApp:
+    clearState: true
+- toggleAirplaneMode: true  # Enable airplane mode
+- assertVisible: "Home"
+- tapOn: "Explore"
+- assertVisible: "Places"  # Content loads from bundled DB
+- tapOn:
+    index: 0  # First place
+- assertVisible: "Details"
+- tapOn: "Prices"
+- assertVisible: "Price Cards"
+- tapOn:
+    index: 0  # First price card
+- assertVisible: "Expected range"
+- tapOn: "Quote → Action"
+- assertVisible: "Enter quoted price"
+- inputText: "50"
+- tapOn: "Check"
+- assertVisible: "Fairness"  # Result shows
+- toggleAirplaneMode: false  # Disable airplane mode
+
+# maestro/flows/03-quote-action-flow.yaml
+# Scenario: Quote → Action provides correct guidance
+appId: com.marrakechcompass.app
+---
+- launchApp
+- tapOn: "Quote → Action"
+- tapOn: "Taxi"
+- assertVisible: "Short ride"
+- tapOn: "Short ride"
+- inputText: "30"
+- tapOn: "Check"
+- assertVisible: "Fair"
+- assertVisible: "Expected range"
+- assertVisible: "Negotiation scripts"
+- inputText: "150"  # Change to high quote
+- tapOn: "Check"
+- assertVisible: "Very High"
+- assertVisible: "Counter-offer"
+
+# maestro/flows/04-home-base-setup.yaml
+# Scenario: User can set and use Home Base
+appId: com.marrakechcompass.app
+---
+- launchApp
+- tapOn: "Go Home"
+- assertVisible: "Set your Home Base"
+- tapOn: "Set Home Base"
+- inputText: "Riad Fes"
+- tapOn: "Search"
+- tapOn:
+    index: 0  # First result
+- tapOn: "Confirm"
+- assertVisible: "Home Base saved"
+- tapOn: "Go Home"
+- assertVisible: "Compass"
+- assertVisible: "Distance"
+
+# maestro/flows/07-route-cards-execution.yaml
+# Scenario: User can follow an itinerary with Route Cards
+appId: com.marrakechcompass.app
+---
+- launchApp
+- tapOn: "More"
+- tapOn: "Itineraries"
+- tapOn: "1-day first timer"
+- assertVisible: "Route overview"
+- tapOn: "Start route"
+- assertVisible: "Next stop"
+- assertVisible: "Distance"
+- tapOn: "Mark as done"
+- assertVisible: "Next stop"  # Advances to step 2
+- tapOn: "Skip"
+- assertVisible: "Next stop"  # Advances to step 3
+- runFlow: "kill-and-relaunch"  # Simulate app kill
+- assertVisible: "Continue route"  # Progress persisted
+- tapOn: "Continue route"
+- assertVisible: "Next stop"  # Still on step 3
+
+# maestro/flows/09-download-pack-flow.yaml
+# Scenario: Download pack with interruption and resume
+appId: com.marrakechcompass.app
+---
+- launchApp
+- tapOn: "Settings"
+- tapOn: "Downloads"
+- tapOn: "Medina Pack"
+- assertVisible: "Download"
+- tapOn: "Download"
+- assertVisible: "Downloading"
+- waitForAnimationEnd
+- delay: 2000  # Let download start
+- tapOn: "Pause"
+- assertVisible: "Paused"
+- tapOn: "Resume"
+- assertVisible: "Downloading"
+- runFlow: "kill-and-relaunch"  # Simulate app kill
+- tapOn: "Settings"
+- tapOn: "Downloads"
+- assertVisible: "Resume"  # Download state persisted
+- tapOn: "Resume"
+- waitForAnimationEnd: { timeout: 60000 }
+- assertVisible: "Installed"
+
+# maestro/flows/12-permission-denial-paths.yaml
+# Scenario: App remains usable when permissions denied
+appId: com.marrakechcompass.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "Go Home"
+- tapOn: "Set Home Base"
+- inputText: "Riad"
+- tapOn: "Search"
+- tapOn:
+    index: 0
+- tapOn: "Confirm"
+- tapOn: "Go Home"
+# System permission dialog appears
+- tapOn: "Don't Allow"  # Deny location
+- assertVisible: "Location not available"
+- assertVisible: "Copy address"  # Fallback still works
+- assertVisible: "Show taxi driver"  # Fallback still works
+- assertNotVisible: "Compass"  # Compass hidden without permission
+```
+
+### Security and integrity tests
+
+```typescript
+// __tests__/services/ContentSyncService.test.ts
+describe('ContentSyncService', () => {
+  describe('manifest verification', () => {
+    it('accepts valid Ed25519 signature', async () => {});
+    it('rejects invalid signature', async () => {});
+    it('rejects expired manifest', async () => {});
+    it('rejects manifest with releasedAt older than stored', async () => {});
+    it('rejects manifest without signature', async () => {});
+  });
+
+  describe('content verification', () => {
+    it('accepts file with matching sha256', async () => {});
+    it('rejects file with mismatched sha256', async () => {});
+    it('rejects corrupted download', async () => {});
+  });
+
+  describe('atomic update', () => {
+    it('activates new content after verification', async () => {});
+    it('rolls back on verification failure', async () => {});
+    it('keeps previous version for rollback', async () => {});
+  });
+});
+
+// __tests__/services/PackRegistry.test.ts
+describe('PackRegistry', () => {
+  describe('install', () => {
+    it('registers pack in user.db after install', async () => {});
+    it('is idempotent (same pack can be reinstalled)', async () => {});
+    it('updates version when pack is upgraded', async () => {});
+  });
+
+  describe('reconcile', () => {
+    it('detects missing pack files and marks for repair', async () => {});
+    it('detects orphan files and cleans up', async () => {});
+    it('auto-rolls back corrupted pack to previous version', async () => {});
+  });
+
+  describe('uninstall', () => {
+    it('removes pack files and registry entry', async () => {});
+    it('keeps dependencies if other packs need them', async () => {});
+  });
+});
+```
+
+### Performance tests
+
+Define performance budgets and enforce them.
+
+**Budgets:**
+
+| Metric | Target | Device Reference |
+|--------|--------|------------------|
+| Cold start | < 2000ms | iPhone 11 / Pixel 4a |
+| Search response (p95) | < 100ms | iPhone 11 / Pixel 4a |
+| Quote → Action calculation | < 50ms | iPhone 11 / Pixel 4a |
+| Compass animation FPS | ≥ 55 fps | iPhone 11 / Pixel 4a |
+| Memory (Explore list) | < 150 MB | Any |
+| Memory (Map view) | < 200 MB | Any |
+
+**Performance test implementation:**
+
+```typescript
+// __tests__/performance/startup.perf.test.ts
+describe('Startup performance', () => {
+  it('cold start completes within budget', async () => {
+    const startTime = performance.now();
+    await launchApp({ clearState: true });
+    await waitForElement('Home');
+    const duration = performance.now() - startTime;
+    expect(duration).toBeLessThan(2000);
+  });
+});
+
+// __tests__/performance/search.perf.test.ts
+describe('Search performance', () => {
+  it('search returns results within budget', async () => {
+    const results = [];
+    for (let i = 0; i < 100; i++) {
+      const start = performance.now();
+      await searchService.search('tajine');
+      results.push(performance.now() - start);
+    }
+    const p95 = percentile(results, 95);
+    expect(p95).toBeLessThan(100);
+  });
+});
+
+// __tests__/performance/memory.perf.test.ts
+describe('Memory usage', () => {
+  it('Explore list stays within memory budget', async () => {
+    await navigateTo('Explore');
+    await scrollToEnd();
+    const memory = await getMemoryUsage();
+    expect(memory.usedJSHeapSize).toBeLessThan(150 * 1024 * 1024);
+  });
+});
+```
+
+### Offline simulation tests
+
+Test offline behavior in CI without real network.
+
+```typescript
+// __tests__/offline/gracefulDegradation.test.ts
+describe('Offline graceful degradation', () => {
+  beforeEach(() => {
+    jest.spyOn(NetInfo, 'fetch').mockResolvedValue({
+      isConnected: false,
+      isInternetReachable: false,
+    });
+  });
+
+  it('Explore screen renders with cached data', async () => {
+    render(<ExploreScreen />);
+    expect(await screen.findByText('Places')).toBeTruthy();
+    expect(screen.queryByText('Loading...')).toBeNull();
+  });
+
+  it('shows offline banner', async () => {
+    render(<ExploreScreen />);
+    expect(await screen.findByText(/offline/i)).toBeTruthy();
+  });
+
+  it('Quote → Action works without network', async () => {
+    render(<QuoteActionScreen />);
+    // ... full flow test
+  });
+
+  it('hides weather widget when offline', async () => {
+    render(<HomeScreen />);
+    expect(screen.queryByTestId('weather-widget')).toBeNull();
+  });
+
+  it('shows cached events with "Last updated" label', async () => {
+    render(<EventsScreen />);
+    expect(await screen.findByText(/last updated/i)).toBeTruthy();
+  });
+});
+```
+
+### Localization tests
+
+```typescript
+// __tests__/localization/translations.test.ts
+import en from '../src/locales/en.json';
+import fr from '../src/locales/fr.json';
+import es from '../src/locales/es.json';
+import de from '../src/locales/de.json';
+import it from '../src/locales/it.json';
+import nl from '../src/locales/nl.json';
+
+const locales = { en, fr, es, de, it, nl };
+
+describe('Translations', () => {
+  const enKeys = getAllKeys(en);
+
+  Object.entries(locales).forEach(([locale, translations]) => {
+    if (locale === 'en') return;
+
+    describe(`${locale} locale`, () => {
+      it('has all keys from English', () => {
+        const localeKeys = getAllKeys(translations);
+        const missingKeys = enKeys.filter(k => !localeKeys.includes(k));
+        expect(missingKeys).toEqual([]);
+      });
+
+      it('has no extra keys not in English', () => {
+        const localeKeys = getAllKeys(translations);
+        const extraKeys = localeKeys.filter(k => !enKeys.includes(k));
+        expect(extraKeys).toEqual([]);
+      });
+
+      it('has no empty string values', () => {
+        const emptyKeys = getKeysWithEmptyValues(translations);
+        expect(emptyKeys).toEqual([]);
+      });
+    });
+  });
+});
+
+// __tests__/localization/rtl.test.ts
+describe('RTL layout', () => {
+  it('Arabic text renders right-to-left', () => {
+    render(<PhraseDetail phrase={arabicPhrase} />);
+    const arabicText = screen.getByTestId('arabic-text');
+    expect(arabicText.props.style).toContainEqual({ textAlign: 'right' });
+  });
+
+  it('Large text mode shows Arabic correctly', () => {
+    render(<LargeTextCard phrase={arabicPhrase} />);
+    // Snapshot to catch layout regressions
+    expect(screen.toJSON()).toMatchSnapshot();
+  });
+});
+
+// __tests__/localization/fallback.test.ts
+describe('Translation fallback', () => {
+  it('falls back to English when translation missing', () => {
+    i18n.changeLanguage('fr');
+    // Assume 'rare_key' exists in en but not fr
+    const result = i18n.t('rare_key');
+    expect(result).toBe(en.rare_key);
+  });
+
+  it('never shows empty string or key name', () => {
+    i18n.changeLanguage('fr');
+    const result = i18n.t('common.save');
+    expect(result).not.toBe('');
+    expect(result).not.toBe('common.save');
+  });
+});
+```
+
+### Content validation tests (CI)
+
+```typescript
+// shared/scripts/validate-content.test.ts
+import { validatePlaces, validatePriceCards, validateItineraries } from './validate-content';
+import places from '../content/places.json';
+import priceCards from '../content/price_cards.json';
+import itineraries from '../content/itineraries.json';
+
+describe('Content validation', () => {
+  describe('Places', () => {
+    it('all places pass schema validation', () => {
+      const result = validatePlaces(places);
+      expect(result.success).toBe(true);
+    });
+
+    it('all places have required fields', () => {
+      places.items.forEach(place => {
+        expect(place.id).toBeDefined();
+        expect(place.name).toBeDefined();
+        expect(place.short_description).toBeDefined();
+        expect(place.category).toBeDefined();
+      });
+    });
+
+    it('all places have reviewedAt date', () => {
+      places.items.forEach(place => {
+        expect(place.reviewed_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      });
+    });
+
+    it('coordinates are valid (when present)', () => {
+      places.items.forEach(place => {
+        if (place.lat !== null) {
+          expect(place.lat).toBeGreaterThanOrEqual(-90);
+          expect(place.lat).toBeLessThanOrEqual(90);
+        }
+        if (place.lng !== null) {
+          expect(place.lng).toBeGreaterThanOrEqual(-180);
+          expect(place.lng).toBeLessThanOrEqual(180);
+        }
+      });
+    });
+
+    it('price ranges are valid (min <= max)', () => {
+      places.items.forEach(place => {
+        if (place.expected_cost_min_mad !== null && place.expected_cost_max_mad !== null) {
+          expect(place.expected_cost_min_mad).toBeLessThanOrEqual(place.expected_cost_max_mad);
+        }
+      });
+    });
+  });
+
+  describe('Price Cards', () => {
+    it('all price cards pass schema validation', () => {
+      const result = validatePriceCards(priceCards);
+      expect(result.success).toBe(true);
+    });
+
+    it('all price cards have updatedAt', () => {
+      priceCards.items.forEach(card => {
+        expect(card.expected_cost_updated_at).toBeDefined();
+      });
+    });
+
+    it('price ranges are valid', () => {
+      priceCards.items.forEach(card => {
+        expect(card.expected_cost_min_mad).toBeLessThanOrEqual(card.expected_cost_max_mad);
+      });
+    });
+  });
+
+  describe('Reference integrity', () => {
+    it('itinerary steps reference valid place IDs', () => {
+      const placeIds = new Set(places.items.map(p => p.id));
+      itineraries.items.forEach(itinerary => {
+        itinerary.steps.forEach(step => {
+          if (step.place_id) {
+            expect(placeIds.has(step.place_id)).toBe(true);
+          }
+        });
+      });
+    });
+
+    it('related_price_card_ids in tips are valid', () => {
+      const priceCardIds = new Set(priceCards.items.map(p => p.id));
+      // Similar validation for tips
+    });
+
+    it('all internal links are valid', () => {
+      // Validate content_links references
+    });
+  });
+});
+```
+
+### CI configuration
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: TypeScript type-check
+        run: npm run typecheck
+      
+      - name: ESLint
+        run: npm run lint
+      
+      - name: Validate content schema
+        run: npm run validate:content
+      
+      - name: Check reference integrity
+        run: npm run check:links
+      
+      - name: Build content.db
+        run: npm run build:content
+      
+      - name: Verify content.db matches shared/content
+        run: npm run verify:content-db
+
+  test:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Unit tests
+        run: npm run test:unit -- --coverage
+      
+      - name: Integration tests
+        run: npm run test:integration
+      
+      - name: Component tests
+        run: npm run test:components
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check forbidden permissions
+        run: npm run check:permissions
+      
+      - name: EAS Build (preview)
+        run: eas build --profile preview --platform all --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  e2e:
+    runs-on: macos-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install Maestro
+        run: curl -Ls "https://get.maestro.mobile.dev" | bash
+      
+      - name: Download preview build
+        run: eas build:download --latest --platform ios --output ./app.tar.gz
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      
+      - name: Extract app
+        run: tar -xzf app.tar.gz
+      
+      - name: Run E2E tests
+        run: maestro test maestro/flows/
+```
+
+### Test commands (package.json)
+
+```json
+{
+  "scripts": {
+    "test": "jest",
+    "test:unit": "jest --testPathPattern='__tests__/(engines|utils|hooks)'",
+    "test:integration": "jest --testPathPattern='__tests__/(repositories|database|services)'",
+    "test:components": "jest --testPathPattern='__tests__/components'",
+    "test:performance": "jest --testPathPattern='__tests__/performance'",
+    "test:offline": "jest --testPathPattern='__tests__/offline'",
+    "test:localization": "jest --testPathPattern='__tests__/localization'",
+    "test:e2e": "maestro test maestro/flows/",
+    "test:e2e:smoke": "maestro test maestro/flows/01-fresh-install-offline.yaml",
+    "validate:content": "ts-node shared/scripts/validate-content.ts",
+    "check:links": "ts-node shared/scripts/check-links.ts",
+    "check:permissions": "ts-node shared/scripts/check-permissions.ts",
+    "build:content": "ts-node shared/scripts/build-bundle.ts",
+    "verify:content-db": "ts-node shared/scripts/verify-content-db.ts"
+  }
+}
+```
+
+### Pre-release checklist (manual QA)
+
+In addition to automated tests, complete this checklist before every store submission:
+
+**Offline behavior:**
+- [ ] Fresh install works in airplane mode
+- [ ] All tabs render with content
+- [ ] Search works offline
+- [ ] Quote → Action works offline
+- [ ] Go Home compass works offline
+- [ ] Route Cards work offline
+- [ ] Downloads resume after app kill
+
+**Platform-specific:**
+- [ ] iOS: VoiceOver reads all interactive elements
+- [ ] iOS: Dynamic Type scales correctly (all sizes)
+- [ ] iOS: Swipe-back gesture works
+- [ ] Android: TalkBack reads all interactive elements
+- [ ] Android: Font scaling works correctly
+- [ ] Android: Back button behavior is correct
+- [ ] Android: Doze mode doesn't break downloads
+
+**Edge cases:**
+- [ ] Low storage: clear error message, no crash
+- [ ] Permission denied: app still usable
+- [ ] Content update interrupted: safe recovery
+- [ ] App killed during route: progress persists
+- [ ] Very long place names: text doesn't overflow
+- [ ] Empty search results: helpful message
+
+**Visual:**
+- [ ] Dark mode: all screens look correct
+- [ ] RTL Arabic text: renders correctly
+- [ ] Large text mode: readable on taxi driver card
+- [ ] Share cards: look good when shared
 
 ---
 
@@ -2417,26 +3547,38 @@ Maintain quality across the single codebase:
 
 ### CI gates (required for "paid quality")
 
+See **Section 12b (Test Strategy)** for complete test definitions and CI configuration.
+
+**On every commit:**
 - TypeScript type-check passes (`tsc --noEmit`)
 - ESLint passes with no errors
-- Jest unit tests pass (engines, hooks, utilities)
-- Validate content schema + references on every PR
+
+**On every PR:**
+- Unit tests pass with >90% coverage on engines (Jest)
+- Integration tests pass (repositories + SQLite)
+- Component tests pass (React Native Testing Library)
+- Validate content schema + references (`npm run validate:content`)
 - Build `content.db` and ensure it includes required tables + FTS tables
 - Verify `assets/seed/content.db` is the latest version generated from `shared/content/`
+- Forbidden-permissions check: fail if contacts/photos permissions appear in `app.json`
 - EAS Build succeeds on both iOS and Android (use `eas build --profile preview`)
-- Generate changelog artifact used for in-app "What's new" + store notes
+
+**On merge to main:**
+- E2E tests pass (Maestro critical flows)
+- Performance tests pass budgets
+- Generate changelog artifact for in-app "What's new" + store notes
 
 ### Trust & reliability gates (additions)
 
 - Pack integrity test: verify manifests + sha256 + install/uninstall flows (simulated)
-- Offline smoke test script: core flows must work in airplane mode
-- Add automated E2E scenarios (Maestro) that run on CI:
-  - airplane mode install → explore → price card → quote → phrasebook → home base (deny permission path)
-  - pack install interrupted → resume → verify → activate
-  - content db swap interrupted → recovery on next launch
-- Forbidden-permissions check (`app.json` permissions configuration):
-  - fail build if contacts/photos permissions appear
-  - validate only `expo-location` foreground permission is requested
+- Offline smoke test: core flows must work in airplane mode (Maestro `01-fresh-install-offline.yaml`)
+- Security tests: signature verification, hash validation, replay prevention
+- Automated E2E scenarios (Maestro) on CI:
+  - `01-fresh-install-offline.yaml`: airplane mode install → explore → price card → quote → phrasebook
+  - `04-home-base-setup.yaml` + `12-permission-denial-paths.yaml`: home base with permission denied path
+  - `09-download-pack-flow.yaml`: pack install interrupted → resume → verify → activate
+  - `07-route-cards-execution.yaml`: route progress persists after app kill
+- Localization tests: all translations complete, RTL rendering correct, fallback works
 
 ### Schema-driven codegen (recommended)
 
