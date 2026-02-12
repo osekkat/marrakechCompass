@@ -54,26 +54,31 @@ It's the "locals' practical guide" you can trust.
 
 ## 2) Monetization
 
-**Chosen model: Option A — Paid up-front**
+**Recommended model: Option B — Free download + one-time unlock (with a meaningful offline preview)**
 
-- Users pay once to download the app and get the full core experience.
-- No free tier, no subscriptions, no daily limits.
+- Free offline preview pack that is genuinely useful (not a "toy demo"):
+  - A small set of **high-impact Price Cards** (e.g., airport taxi + short taxi + 1–2 souk categories)
+  - Quote → Action enabled for those categories
+  - Arrival checklist + core "say no" phrases
+  - A handful of curated places + 1 itinerary
+- One-time purchase unlocks full Marrakech content + all offline features.
+- Still: **no subscriptions, no ads, no accounts**.
 - Target price: **$4.99–$9.99** (regional pricing enabled).
-- Simplest implementation; no gating logic, no IAP flows required.
+- Implementation cost is higher (IAP + restore), but conversion is typically stronger.
 
-**Alternative considered (Option B — Free download + one-time unlock):**
-- Free offline preview pack (small but genuinely useful: 3 price cards + 5 places + 20 phrases + arrival checklist)
-- One-time purchase unlocks full Marrakech content + all offline features
-- Still: no subscriptions, no accounts, no ads, no data selling
+**Alternative (Option A — Paid up-front):**
+- Keep as a launch fallback if you strongly prioritize implementation simplicity.
+- Note: paid-up-front can reduce installs (especially for influencer-driven campaigns).
 
 **Why these models work for this app:**
 - Acquisition is influencer/IG/FB-driven (value is pre-sold before install).
 - First-time tourists want reliability, not experiments.
 - Competitive research shows backlash against subscriptions and restrictive free tiers.
+- Free preview lets users experience the app's quality before committing; paywall appears only after they've tasted core value.
 
 **What the app guarantees to the user:**
 - Everything essential works offline after install/unlock.
-- No surprise paywalls beyond the one-time unlock (if Option B).
+- No surprise paywalls beyond the one-time unlock.
 - No account required.
 - No ads. No data selling.
 
@@ -82,7 +87,8 @@ It's the "locals' practical guide" you can trust.
 - Extra regions / day trips pack
 
 **Important rule:**
-- Core Marrakech experience must feel complete without any add-ons.
+- The unlocked core Marrakech experience must feel complete without any add-ons.
+- The preview pack must still deliver real offline value so users trust the unlock.
 
 **Downloads screen:**
 - Clear messaging on what's included vs optional packs (sizes, Wi‑Fi-only toggle).
@@ -254,7 +260,8 @@ A lightweight planner that fulfills the core JTBD ("give me a realistic plan for
 **Implementation approach:** deterministic `planEngine` using your curated content.
 - Inputs: `availableMinutes`, `startPoint`, `interests[]`, `pace`, `budgetTier`
 - Data: per-place `visitMinMinutes`/`visitMaxMinutes`, `bestTimeWindows`, structured hours (if present), tags, and optional `crowdLevel`/`kidFriendly` tags
-- Travel-time model (offline): region clustering + simple travel-time estimates between regions (or tuned distance heuristics)
+- Travel-time model (offline): prefer a **precomputed travel-time matrix** (distance + ETA) between curated POIs (generated at build time)
+  - Fallback: region clustering + tuned heuristics only when no matrix entry exists
 - Output: ordered `Plan` (a list of place ids + time blocks) suitable for Route Cards
 
 This keeps the promise of "what should I do today?" even for users who never open the itineraries list.
@@ -299,10 +306,14 @@ For each itinerary (and any generated plan later), provide a **Route Card** view
 - Define **Routing Capability Levels** (to avoid "half-working" UX):
   - Level 0: compass + distance + landmark hint (always available)
   - Level 1: offline map display + user dot + bearing line (no routing)
-  - Level 2: offline route polyline from bundled walking graph (no turn-by-turn)
-  - Level 3: optional future turn-by-turn (only if reliability is proven)
-- Provide point-to-point walking guidance **within installed offline map pack areas** (Medina core first).
-- Cache per-leg route results locally (routeId + stepIndex → polyline + distance + ETA) for stability and performance
+  - Level 2: offline route polyline from precomputed legs (no turn-by-turn)
+  - Level 3: optional future turn-by-turn via on-device routing graph (only if reliability is proven)
+- Prefer **precomputed route legs** (polyline + distance + ETA) for:
+  - itinerary steps
+  - My Day generated steps
+  - a curated set of "common legs" within the Medina
+- On-device routing graph becomes optional (Phase 3/Level 3), not required for a reliable v1
+- Cache per-leg results locally (routeId + stepIndex → polyline + distance + ETA) for stability and performance
 - Fallback when routing is unavailable: Level 0 + short "Medina Mode" hint text + one-tap "Ask for directions" phrase card
 - For each leg, compute straight-line distance with Haversine and estimate walk time with tuned speeds:
   - default: ~4.5 km/h (outside medina)
@@ -363,11 +374,12 @@ Users set a single "Home Base" once (their riad/hotel). Then the app can always 
 - Add a safety timeout so location updates stop automatically after X minutes if the screen is left open (prevents silent battery drain)
 - Provide a manual "Refresh location" button
 
-**Compass heading (expo-sensors):**
-- Use `Magnetometer` subscription for compass heading; fallback to "bearing only" if unavailable
-- Subscribe to magnetometer **only while compass screen is visible** (start in `useEffect`, call `subscription.remove()` on unmount)
-- Throttle UI redraw (arrow rotation) to a fixed cadence (e.g., 10–20 Hz) using `Magnetometer.setUpdateInterval()`
-- Expose a "Heading confidence" state (good / weak / unavailable) that can trigger simplified guidance when sensors are unreliable
+**Compass heading (prefer fused heading):**
+- Prefer `expo-location` heading updates (`watchHeadingAsync`) when available (more stable than raw magnetometer in dense urban environments like the Medina)
+- Fallback to `expo-sensors` Magnetometer only if heading APIs are unavailable
+- Subscribe **only while the compass/route screen is visible**; always clean up subscriptions on unmount
+- Smooth heading with a simple low-pass filter to reduce jitter (don't "snap")
+- Expose a "Heading confidence" + "Calibration needed" state with friendly guidance (e.g., "move your phone in a figure‑8")
 
 **Compute (shared TypeScript logic):**
 - `distanceMeters = haversine(current, homeBase)`
@@ -1008,6 +1020,12 @@ Minimum pipeline (even if manual at first):
   - Optional warning if old (e.g., > 6 months):
     - "Prices may have changed"
 
+- Standardize staleness + confidence rules via a single **TrustEngine**:
+  - Inputs: `verifiedAt/updatedAt`, `fieldType` (hours/fees/price), `volatility`, `confidence`, optional `staleAfterDays`
+  - Output: `{ freshnessLevel, badgeLabel, warningCopy, showCTA }`
+  - Unit-test these rules (avoids regressions that undermine trust)
+  - Single source of truth for staleness thresholds across Places, Prices, Quote→Action, Tips
+
 - Every place detail shows (field-level trust):
   - "Verified: YYYY-MM-DD" (editor check)
   - Hours verified date (if structured hours)
@@ -1067,8 +1085,13 @@ This app is built with **Expo React Native** (using `expo-dev-client` for develo
 **Architecture pattern:**
 - **Feature-based folder structure** with clean separation
 - **Repository pattern** for data access
-- **React Context + hooks** for dependency injection and state management
+- **React Context + hooks** for dependency injection (DB/services only)
+- Use a small global state store with selectors for high-churn UI state (downloads, active route, offline readiness)
 - **Unidirectional data flow** (state flows down, actions flow up)
+
+**Architecture enforcement (paid-app reliability):**
+- Add lint rules to prevent cross-feature imports (enforce boundaries)
+- Keep engines pure (no Expo imports) so they are unit-testable
 
 ### Expo React Native stack
 
@@ -1112,15 +1135,21 @@ This app is built with **Expo React Native** (using `expo-dev-client` for develo
 - `expo-asset` for bundling seed content
 
 **Network State:**
-- `expo-network` for network state detection and Wi-Fi-only toggle
+- Use `@react-native-community/netinfo` for reliable network state + subscriptions (Wi‑Fi-only gating)
+- Optionally keep `expo-network` for one-off "what's my current state" checks
 
 **IAP:**
-- Not required (Option A: paid up-front model, no in-app purchases)
+- Required if Option B (one-time unlock):
+  - Use `react-native-iap` or `expo-in-app-purchases` for iOS/Android IAP
+  - Implement **restore purchases** and resilient local "unlocked" state
+  - Keep gating logic content-driven (preview pack vs unlocked packs) so it's easy to tune
+- Not required if Option A (paid up-front)
 
 **UI Components:**
 - Custom components following platform conventions
 - `react-native-reanimated` for smooth animations (compass arrow, transitions)
 - `react-native-gesture-handler` for gesture support
+- `@shopify/flash-list` for high-performance lists (Explore/Eat/Prices)
 
 ### Expo library mapping
 
@@ -1131,11 +1160,11 @@ This app is built with **Expo React Native** (using `expo-dev-client` for develo
 | `react-native-sqlite-storage` | `expo-sqlite` | Full FTS5 support in SDK 50+ |
 | `react-native-fs` | `expo-file-system` | File operations, atomic moves |
 | `react-native-background-downloader` | `expo-file-system` | `createDownloadResumable()` |
-| `@react-native-community/netinfo` | `expo-network` | Network state detection |
+| `@react-native-community/netinfo` | `@react-native-community/netinfo` (preferred) or `expo-network` | Network state detection |
 | `react-native-localize` | `expo-localization` | Device locale detection |
 | `react-native-share` | `expo-sharing` | Native share sheets |
 | `react-native-fast-image` | `expo-image` | Better caching, modern API |
-| `react-native-iap` | Not needed | Option A: paid up-front |
+| `react-native-iap` | `react-native-iap` or `expo-in-app-purchases` | Required for Option B (one-time unlock) |
 
 ### State & data
 
@@ -1158,7 +1187,12 @@ Expo React Native uses the same data architecture on both platforms:
 
 - Activation must be exclusive and crash-safe:
   - Close all SQLite connections via the db wrapper
+  - Ensure no `-wal` / `-shm` sidecar files remain for `content.db` (delete or swap them together)
+  - Open `content.db` in read-only / query-only mode (prevent accidental writes that create WAL)
   - Use `FileSystem.moveAsync()` for atomic rename (temp file + rollback)
+  - Post-activation verification:
+    - `PRAGMA quick_check;` (mandatory)
+    - rollback to last-known-good if verification fails
   - Reopen connections after swap
 
 **Non-blocking startup rule:**
@@ -1171,10 +1205,11 @@ Expo React Native uses the same data architecture on both platforms:
 Treat downloads like a mini product: predictable, resumable, and easy to manage.
 
 **Expo (both platforms):**
-- Use `expo-file-system` `createDownloadResumable()` for resumable background downloads
+- Use `expo-file-system` `createDownloadResumable()` for resumable downloads
+- Treat "background downloading while the app is killed" as **best-effort** (platform-dependent); the hard requirement is **process-death-resilient resume on next launch** with clear user messaging
 - Resume data stored for pause/resume (library handles Range headers via `savable()` and `resumeAsync()`)
 - Preflight: check available disk space via `expo-file-system` (`FileSystem.getFreeDiskStorageAsync()`)
-- Use `expo-network` for network state and Wi-Fi-only toggle
+- Use `@react-native-community/netinfo` for network state and Wi-Fi-only toggle
 
 **Packs are a product surface:**
 - Pack manifest supports **dependencies** (e.g., routing_graph depends on medina_map_tiles)
@@ -1183,6 +1218,9 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
   - Use `expo-crypto` for sha256 verification
 - **Signed manifest (recommended even in v1 if any packs are hosted remotely):** Ed25519 signature with pinned public key
 - Safe install pipeline: download → verify → unpack to temp → validate → atomic move → register
+- Make installs **idempotent** and crash-safe via a Pack Registry (single source of truth):
+  - `packs` table in `user.db`: `{ packId, version, state, installedAt, sizeBytes, sha256, lastVerifiedAt }`
+  - on app start: reconcile filesystem ↔ registry; repair or rollback if mismatched
 - Rollback: keep last-known-good pack version; auto-revert on validation failure
 - Cache eviction policy:
   - Show total space used by packs
@@ -1197,6 +1235,7 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
 - Base Pack (ships in-app)
 - Medina Pack (offline map + routing graph + core POIs)
   - Declare explicit subcomponents: tiles + routing graph + POIs (lets you diagnose failures clearly)
+  - Add: `travel_matrix` + `route_legs` (precomputed; powers fast offline Route Cards + My Day)
 - Gueliz Pack (offline POIs + map)
 - Day Trips Pack (offline guides; optional map)
 - Audio Pack (phrases + mini guides)
@@ -1211,9 +1250,13 @@ Treat downloads like a mini product: predictable, resumable, and easy to manage.
 - **SQLite full-text search** for fast, consistent on-device search (FTS5 preferred):
   - FTS across places, price cards, phrases, tips/articles
   - Add a shared **normalization spec** (Arabic/Latin/digits) applied at index + query time
+  - Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) → (0123456789) at index + query time
   - Index `aliases` aggressively (high leverage for tourists)
   - Add lightweight ranking boosts: exact match > alias match > prefix match > contains
   - Add "Did you mean?" suggestions using aliases + prefix candidates (offline, deterministic)
+  - Prefer per-locale indexing strategy:
+    - show results in UI language when available
+    - fallback to English content when missing (never blank)
   - `expo-sqlite` supports FTS5 on both platforms (Expo SDK 50+)
   - FTS tables must be prebuilt in `content.db` (no runtime index creation)
 
@@ -1252,7 +1295,7 @@ marrakechCompass/
 │   │   │   └─ RecentsRepository.ts
 │   │   ├─ services/
 │   │   │   ├─ LocationService.ts    # expo-location wrapper
-│   │   │   ├─ HeadingService.ts     # expo-sensors magnetometer
+│   │   │   ├─ HeadingService.ts     # expo-location heading (preferred) + magnetometer fallback
 │   │   │   ├─ DownloadService.ts    # expo-file-system downloads
 │   │   │   ├─ ContentSyncService.ts # bundle verification + swap
 │   │   │   └─ SearchService.ts      # FTS5 queries
@@ -1260,7 +1303,8 @@ marrakechCompass/
 │   │       ├─ PricingEngine.ts      # Quote → Action logic
 │   │       ├─ PlanEngine.ts         # My Day offline builder
 │   │       ├─ RouteEngine.ts        # leg estimates + progress
-│   │       └─ GeoEngine.ts          # haversine, bearing
+│   │       ├─ GeoEngine.ts          # haversine, bearing
+│   │       └─ TrustEngine.ts        # staleness/confidence/volatility → UI badges + warnings
 │   ├─ features/
 │   │   ├─ home/
 │   │   │   ├─ HomeScreen.tsx
@@ -1376,6 +1420,7 @@ marrakechCompass/
 │   ├─ scripts/
 │   │   ├─ validate-content.ts
 │   │   ├─ build-bundle.ts          # JSON → SQLite content.db
+│   │   ├─ build-routing-matrix.ts  # curated POIs → travel-time matrix + route legs (offline)
 │   │   ├─ check-links.ts
 │   │   └─ copy-db-to-assets.ts     # Copy content.db to assets/seed/
 │   └─ schema/
@@ -1391,7 +1436,8 @@ marrakechCompass/
 │   ├─ engines/
 │   │   ├─ PricingEngine.test.ts
 │   │   ├─ PlanEngine.test.ts
-│   │   └─ GeoEngine.test.ts
+│   │   ├─ GeoEngine.test.ts
+│   │   └─ TrustEngine.test.ts
 │   └─ components/
 │
 └─ convex/                          # Phase 2 only
@@ -1411,6 +1457,14 @@ marrakechCompass/
 ---
 
 ## 8) Phase 2 backend: Convex (for updates + sync, not dependency)
+
+Phase 2 goal: enable updates without app releases while keeping offline reliability.
+
+You can do this with either:
+- **Signed manifests + static hosting (recommended baseline)** for `content.db` + pack files on a CDN/object store
+- **Convex (optional)** for admin workflows, feedback intake, and an events feed
+
+The simpler baseline (static hosting + signed manifests) reduces operational complexity and makes Phase 2 less "all-or-nothing."
 
 Convex is added to:
 
@@ -1841,7 +1895,7 @@ The current `shared/content/*.json` files (including the newly added Lonely Plan
 - Global search modal/screen
 - Shared "detail" screens (place detail, price card detail)
 - Settings screen (offline downloads/**Downloads manager**, exchange rate, **language**, privacy, Privacy Center, diagnostics, "What's new")
-- Diagnostics screen (content version, last sync/import status, storage usage, **Offline Readiness**, export debug report)
+- Diagnostics screen (content version, last sync/import status, storage usage, **Offline Readiness**, **Repair Packs**, export debug report)
 
 ### Home
 
@@ -1979,6 +2033,7 @@ marrakechCompass/
 │   ├── scripts/
 │   │   ├── validate-content.ts  # Zod validation
 │   │   ├── build-bundle.ts      # JSON → SQLite content.db
+│   │   ├── build-routing-matrix.ts  # curated POIs → travel-time matrix + route legs
 │   │   ├── check-links.ts       # Reference validation
 │   │   └── copy-db-to-assets.ts # Copy to assets/seed/
 │   └── schema/
@@ -1994,7 +2049,8 @@ marrakechCompass/
 │   ├── engines/
 │   │   ├── PricingEngine.test.ts
 │   │   ├── PlanEngine.test.ts
-│   │   └── GeoEngine.test.ts
+│   │   ├── GeoEngine.test.ts
+│   │   └── TrustEngine.test.ts
 │   └── components/
 │
 ├── convex/                      # Phase 2 only
@@ -2052,6 +2108,7 @@ marrakechCompass/
   - search response time target (p95)
   - memory ceiling in Explore + Map views
   - offline map render performance (fps target on mid-tier device)
+  - **marker budget** (max markers rendered at once; enforce clustering/progressive disclosure)
   - offline route computation budget (time-to-route for Medina core)
 
 ### Offline behavior
@@ -2074,11 +2131,19 @@ marrakechCompass/
   - No ads, no selling data, no shady SDKs
   - If crash reporting exists, make it privacy-forward and explain it in-app (opt-in preferred)
 
-### Privacy Center (in Settings)
-- Plain-language explanation of:
+### Privacy / Trust / Attribution Center (in Settings)
+
+A user-facing screen that builds confidence and reduces "why should I trust this?" friction:
+
+- **"Works offline" explanation**: clear, friendly summary of what works without internet
+- **"How prices are sourced"**: what "confidence" and "last reviewed" mean; how ranges are derived
+- **"How to report outdated info"**: link to feedback flow
+- **Data & privacy**:
   - what data is stored on-device
   - what leaves the device (ideally nothing in v1)
   - why permissions are requested (location only, on-demand)
+- **Attributions**: map data licenses, media credits, open-source licenses
+- **Crash reporting toggle**: opt-in preferred, off by default, with clear explanation
 
 ### Store policy resilience
 - CI check: fail release builds if iOS build SDK / Android target SDK are below current store requirements
@@ -2365,6 +2430,10 @@ Maintain quality across the single codebase:
 
 - Pack integrity test: verify manifests + sha256 + install/uninstall flows (simulated)
 - Offline smoke test script: core flows must work in airplane mode
+- Add automated E2E scenarios (Maestro) that run on CI:
+  - airplane mode install → explore → price card → quote → phrasebook → home base (deny permission path)
+  - pack install interrupted → resume → verify → activate
+  - content db swap interrupted → recovery on next launch
 - Forbidden-permissions check (`app.json` permissions configuration):
   - fail build if contacts/photos permissions appear
   - validate only `expo-location` foreground permission is requested
@@ -2388,7 +2457,7 @@ The app is "ready to sell" when:
 - Store pages (App Store + Play Store) clearly communicate the value in 5 seconds
 - Offline promise is validated via a repeatable test checklist (airplane mode + interrupted update + low storage)
 - Both platforms pass accessibility audits (VoiceOver + TalkBack)
-- Option A (paid up-front) implemented: no billing flows; app is fully accessible after paid install
+- Option B (free preview + one-time unlock) implemented: IAP + restore works; preview pack delivers real value; paywall appears after user experiences core features
 - Expo app performs smoothly on mid-tier devices (no jank, fast startup)
 - No JS errors or yellow boxes in release builds
 - Same user experience on iOS and Android (single codebase advantage)
